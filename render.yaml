@@ -60,5 +60,7 @@ services:
     envVars:
       - key: CODE_RUNNER_SECRET
         sync: false
+      - key: ALLOWED_ORIGINS_STR
+        sync: false   # add your frontend origin(s), e.g. your Vercel URL
       - key: SANDBOX_TIMEOUT
         value: "10"

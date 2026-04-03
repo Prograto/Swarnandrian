@@ -16,10 +16,28 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, Header
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ─── App setup ───────────────────────────────────────────────────────────────
 app = FastAPI(title="Swarnandrian Code Runner", version="2.0.0")
+
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS_STR",
+        "http://localhost:3000,http://localhost:80",
+    ).split(",")
+    if origin.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 INTERNAL_SECRET = os.getenv("CODE_RUNNER_SECRET", "code-runner-internal-secret")
 SANDBOX_DIR = Path("/tmp/sandbox")

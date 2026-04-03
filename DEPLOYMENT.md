@@ -101,6 +101,7 @@ git push -u origin main
    | Key | Value |
    |---|---|
    | `CODE_RUNNER_SECRET` | `SwarnandrianCodeRunnerSecret` |
+   | `ALLOWED_ORIGINS_STR` | `http://localhost:3000,https://YOUR-APP.vercel.app` *(replace with your actual frontend origin(s))* |
    | `SANDBOX_TIMEOUT` | `10` |
 5. Click **Create Web Service**
 
@@ -259,6 +260,8 @@ docker run --rm -it \
 ```
 
 Use Docker for the code runner even in local/manual mode. For Render and Vercel deployment, you do not run these terminal commands on the platform itself; Render uses the Dockerfiles and Vercel uses the build settings below.
+
+If you change your frontend port or deploy to a custom domain, update `ALLOWED_ORIGINS_STR` in the shared `.env` so both the backend and code runner accept the same browser origin(s).
 
 **Terminal 3 — Frontend:**
 ```bash

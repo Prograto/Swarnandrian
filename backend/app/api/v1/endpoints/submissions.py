@@ -69,13 +69,40 @@ async def _update_leaderboard(
 async def _call_code_runner(payload: dict) -> dict:
     """Call the code execution microservice."""
     async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            f"{settings.CODE_RUNNER_BASE_URL}/execute",
-            json=payload,
-            headers={"X-Internal-Secret": settings.CODE_RUNNER_SECRET},
-        )
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            response = await client.post(
+                f"{settings.CODE_RUNNER_BASE_URL}/execute",
+                json=payload,
+                headers={"X-Internal-Secret": settings.CODE_RUNNER_SECRET},
+            )
+        except httpx.TimeoutException as exc:
+            raise HTTPException(status_code=503, detail="Code execution service timed out") from exc
+        except httpx.RequestError as exc:
+            raise HTTPException(status_code=503, detail="Code execution service is unavailable") from exc
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = "Code execution service rejected the request"
+        try:
+            body = exc.response.json()
+        except ValueError:
+            body = None
+
+        if isinstance(body, dict):
+            detail = body.get("detail") or body.get("message") or body.get("error") or detail
+        else:
+            text = exc.response.text.strip()
+            if text:
+                detail = text
+
+        status_code = exc.response.status_code if exc.response.status_code < 500 else 502
+        raise HTTPException(status_code=status_code, detail=detail) from exc
+
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="Code execution service returned invalid JSON") from exc
 
 
 @router.post("/code")
