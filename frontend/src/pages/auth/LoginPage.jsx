@@ -14,6 +14,7 @@ import RocketLaunchRoundedIcon from '@mui/icons-material/RocketLaunchRounded';
 import SchoolRoundedIcon from '@mui/icons-material/SchoolRounded';
 import SecurityRoundedIcon from '@mui/icons-material/SecurityRounded';
 import LoginRoundedIcon from '@mui/icons-material/LoginRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 
 const ROLES = [
   { id:'student', label:'Student', icon:<SchoolRoundedIcon sx={{ fontSize: 18 }} />,  accent:'from-[#34d399] to-[#60a5fa]', badge:'badge-mint' },
@@ -42,6 +43,38 @@ const LOGIN_META = {
   },
 };
 
+function getLoginErrorMessage(error, currentRole) {
+  const status = error?.response?.status;
+  const detail = error?.response?.data?.detail;
+  const roleLabel = currentRole ? `${PLACEHOLDER[currentRole].toLowerCase()}` : 'credentials';
+
+  if (status === 401) {
+    return `We couldn't sign you in. Check your ${roleLabel}, password, and selected role, then try again.`;
+  }
+
+  if (status === 403) {
+    return typeof detail === 'string' && detail ? detail : 'This account is disabled. Contact an administrator to restore access.';
+  }
+
+  if (status === 422) {
+    return 'Please review the highlighted fields and make sure both the ID and password are filled in.';
+  }
+
+  if (status === 429) {
+    return 'Too many sign-in attempts. Please wait a moment and try again.';
+  }
+
+  if (typeof detail === 'string' && detail) {
+    return detail;
+  }
+
+  if (!error?.response) {
+    return 'Network error. Check your connection and try again.';
+  }
+
+  return 'Sign in failed. Please try again.';
+}
+
 export default function LoginPage() {
   const [params] = useSearchParams();
   const [role,    setRole]    = useState(params.get('role')||'student');
@@ -50,6 +83,7 @@ export default function LoginPage() {
   const [showPw,  setShowPw]  = useState(false);
   const [loading, setLoad]    = useState(false);
   const [errors, setErrors]    = useState({});
+  const [submitError, setSubmitError] = useState('');
   const { login } = useAuthStore();
   const navigate  = useNavigate();
 
@@ -95,10 +129,16 @@ export default function LoginPage() {
     });
   }, [role]);
 
+  useEffect(() => {
+    setErrors({});
+    setSubmitError('');
+  }, [role]);
+
   const validate = () => {
+    setSubmitError('');
     const next = {};
-    if (!userId.trim()) next.userId = `${PLACEHOLDER[role]} is required`;
-    if (!password.trim()) next.password = 'Password is required';
+    if (!userId.trim()) next.userId = `Please enter your ${PLACEHOLDER[role]}.`;
+    if (!password.trim()) next.password = 'Please enter your password.';
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -107,12 +147,13 @@ export default function LoginPage() {
     e.preventDefault();
     if (!validate()) return;
     setLoad(true);
+    setSubmitError('');
     try {
       await login(userId, password, role);
       toast.success('Welcome back!');
       navigate(DASH[role]);
     } catch(err) {
-      toast.error(err.response?.data?.detail || 'Invalid credentials');
+      setSubmitError(getLoginErrorMessage(err, role));
     } finally { setLoad(false); }
   };
 
@@ -250,26 +291,72 @@ export default function LoginPage() {
               ))}
             </div>
 
+            {submitError && (
+              <div className="mb-5 rounded-2xl border border-red-200 bg-red-50/90 p-4 text-sm text-red-700 shadow-sm dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-200" role="alert" aria-live="polite">
+                <div className="flex items-start gap-3">
+                  <WarningAmberRoundedIcon sx={{ fontSize: 18 }} className="mt-0.5 text-red-500" />
+                  <div className="min-w-0">
+                    <p className="font-semibold text-red-800 dark:text-red-100">Sign-in failed</p>
+                    <p className="mt-1 leading-6">{submitError}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-secondary">{PLACEHOLDER[role]}</label>
                 <input
                   className={`input ${errors.userId ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : ''}`}
                   placeholder={`Enter your ${PLACEHOLDER[role]}`}
-                  value={userId} onChange={e=>setUserId(e.target.value)} autoComplete="username" autoFocus/>
-                {errors.userId && <p className="mt-1.5 text-xs text-red-500">{errors.userId}</p>}
+                  value={userId}
+                  onChange={(e) => {
+                    setUserId(e.target.value);
+                    if (submitError) setSubmitError('');
+                    if (errors.userId) {
+                      setErrors((prev) => {
+                        const next = { ...prev };
+                        delete next.userId;
+                        return next;
+                      });
+                    }
+                  }}
+                  autoComplete="username"
+                  autoFocus
+                  aria-invalid={Boolean(errors.userId)}
+                  aria-describedby={errors.userId ? 'login-userid-error' : undefined}
+                />
+                {errors.userId && <p id="login-userid-error" className="mt-1.5 text-xs text-red-500">{errors.userId}</p>}
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-secondary">Password</label>
                 <div className="relative">
-                  <input className={`input pr-10 ${errors.password ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : ''}`} type={showPw?'text':'password'}
-                    placeholder="Enter your password" value={password} onChange={e=>setPass(e.target.value)} autoComplete="current-password"/>
+                  <input
+                    className={`input pr-10 ${errors.password ? 'border-red-400 focus:border-red-500 focus:ring-red-500/20' : ''}`}
+                    type={showPw ? 'text' : 'password'}
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => {
+                      setPass(e.target.value);
+                      if (submitError) setSubmitError('');
+                      if (errors.password) {
+                        setErrors((prev) => {
+                          const next = { ...prev };
+                          delete next.password;
+                          return next;
+                        });
+                      }
+                    }}
+                    autoComplete="current-password"
+                    aria-invalid={Boolean(errors.password)}
+                    aria-describedby={errors.password ? 'login-password-error' : undefined}
+                  />
                   <button type="button" onClick={()=>setShowPw(!showPw)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-secondary hover:text-primary">
                     {showPw?<RiEyeOffLine className="w-4 h-4"/>:<RiEyeLine className="w-4 h-4"/>}
                   </button>
                 </div>
-                {errors.password && <p className="mt-1.5 text-xs text-red-500">{errors.password}</p>}
+                {errors.password && <p id="login-password-error" className="mt-1.5 text-xs text-red-500">{errors.password}</p>}
               </div>
               <button type="submit" disabled={loading} className="btn btn-primary w-full py-3 mt-2 shadow-glow">
                 {loading ? 'Signing in…' : <>Sign In <RiArrowRightLine className="w-4 h-4"/></>}
