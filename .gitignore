@@ -1,0 +1,31 @@
+# ── Secrets — NEVER commit these ──────────────────────────────
+.env
+.env.local
+.env.production
+frontend/.env.local
+frontend/.env.production
+
+# ── Python ─────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# ── Node / React ────────────────────────────────────────────────
+node_modules/
+frontend/build/
+frontend/.npm
+
+# ── Docker ─────────────────────────────────────────────────────
+*.dockerignore
+
+# ── OS ─────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ─────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp

@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────
+# render.yaml — Render Blueprint (Infrastructure as Code)
+# This deploys BOTH backend and code-runner as separate services.
+#
+# HOW TO USE:
+#   1. Push your repo to GitHub
+#   2. Go to render.com > New > Blueprint
+#   3. Connect your repo — Render reads this file automatically
+#   4. Fill in the secret values when prompted
+# ─────────────────────────────────────────────────────────────
+
+services:
+  # ── Main FastAPI Backend ─────────────────────────────────
+  - type: web
+    name: swarnandrian-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: MONGODB_URL
+        sync: false   # fill in Render dashboard (sensitive)
+      - key: MONGODB_DB_NAME
+        value: swarnandrian
+      - key: JWT_SECRET_KEY
+        sync: false   # fill in Render dashboard (sensitive)
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "1440"
+      - key: CODE_RUNNER_URL
+        fromService:
+          name: swarnandrian-code-runner
+          type: web
+          property: hostport
+      - key: CODE_RUNNER_SECRET
+        sync: false
+      - key: ALLOWED_ORIGINS_STR
+        sync: false   # set after Vercel deploys — add your Vercel URL
+      - key: FRONTEND_URL
+        sync: false
+      - key: APP_ENV
+        value: production
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AWS_S3_BUCKET
+        value: swarnandrian
+
+  # ── Code Execution Microservice ──────────────────────────
+  - type: web
+    name: swarnandrian-code-runner
+    runtime: docker
+    dockerfilePath: ./code-runner/Dockerfile
+    dockerContext: ./code-runner
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: CODE_RUNNER_SECRET
+        sync: false
+      - key: SANDBOX_TIMEOUT
+        value: "10"
