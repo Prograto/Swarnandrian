@@ -170,9 +170,9 @@ export default function StudentNavbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-theme bg-surface/92 backdrop-blur-xl">
       <div className="mx-auto flex min-h-16 max-w-7xl flex-wrap items-center gap-3 px-4 py-2 sm:px-6 lg:pr-8">
-        <Link to="/student" className="flex items-center gap-3 shrink-0">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-[#4F7CF3] to-[#7C8CFF] text-white shadow-[0_12px_30px_rgba(79,124,243,0.28)]">
-            <img src="/logo.png" alt="Swarnandrian" className="h-7 w-7 rounded-xl object-cover" />
+        <Link to="/student" className="flex items-center gap-3 shrink-0 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
+          <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl bg-transparent">
+            <img src="/logo.png" alt="Swarnandrian" className="h-full w-full object-cover" />
           </div>
           <div className="min-w-0 hidden sm:block">
             <p className="font-bold text-primary leading-tight">Swarnandrian</p>
@@ -196,7 +196,7 @@ export default function StudentNavbar() {
                 <Link
                   to={item.href}
                   onClick={() => setNavOpen('')}
-                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-2xl px-3 py-1.5 text-sm font-medium transition-all ${
+                  className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-2xl px-3 py-1.5 text-sm font-medium transition-all focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
                     active
                       ? 'bg-primary/10 text-primary'
                       : 'text-secondary hover:bg-surface-lighter hover:text-primary'
@@ -219,7 +219,7 @@ export default function StudentNavbar() {
                         <Link
                           key={child.href}
                           to={child.href}
-                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-secondary hover:bg-surface-lighter hover:text-primary"
+                          className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-secondary hover:bg-surface-lighter hover:text-primary focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
                         >
                           <ChildIcon sx={{ fontSize: 16 }} />
                           {child.label}
@@ -238,7 +238,7 @@ export default function StudentNavbar() {
             type="button"
             onClick={toggleTheme}
             aria-label="Toggle theme"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-theme bg-surface-card text-secondary transition-colors hover:bg-surface-lighter hover:text-primary"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-surface-card text-secondary transition-colors hover:bg-surface-lighter hover:text-primary focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
           >
             {isDark ? <LightModeOutlinedIcon sx={{ fontSize: 18 }} /> : <DarkModeOutlinedIcon sx={{ fontSize: 18 }} />}
           </button>
@@ -249,7 +249,7 @@ export default function StudentNavbar() {
             <button
               type="button"
               onClick={() => setProfileOpen((prev) => !prev)}
-              className="inline-flex h-10 items-center gap-3 rounded-2xl border border-theme bg-surface-card px-2.5 pr-3 transition-colors hover:bg-surface-lighter"
+              className="inline-flex h-10 items-center gap-3 rounded-2xl bg-surface-card px-2.5 pr-3 transition-colors hover:bg-surface-lighter focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
             >
               <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#4F7CF3] to-[#7C8CFF] text-xs font-bold text-white">
                 <Avatar user={displayUser} />
@@ -318,7 +318,7 @@ export default function StudentNavbar() {
             type="button"
             onClick={() => setMobileOpen((prev) => !prev)}
             aria-label="Open menu"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-theme bg-surface-card text-secondary transition-colors hover:bg-surface-lighter hover:text-primary lg:hidden"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-surface-card text-secondary transition-colors hover:bg-surface-lighter hover:text-primary lg:hidden focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
           >
             {mobileOpen ? <CloseRoundedIcon sx={{ fontSize: 18 }} /> : <MenuRoundedIcon sx={{ fontSize: 18 }} />}
           </button>
@@ -346,7 +346,7 @@ export default function StudentNavbar() {
                     <div key={item.label} className="space-y-2">
                       <Link
                         to={item.href}
-                        className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-medium transition-all ${
+                        className={`flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-medium transition-all focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${
                           active
                             ? 'border-primary/20 bg-primary/10 text-primary'
                             : 'border-theme bg-surface-card text-secondary hover:bg-surface-lighter hover:text-primary'
@@ -363,7 +363,7 @@ export default function StudentNavbar() {
                               <Link
                                 key={child.href}
                                 to={child.href}
-                                className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-secondary hover:bg-surface-lighter hover:text-primary"
+                                className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-secondary hover:bg-surface-lighter hover:text-primary focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
                               >
                                 <ChildIcon sx={{ fontSize: 14 }} />
                                 {child.label}
@@ -387,7 +387,7 @@ export default function StudentNavbar() {
                         key={item.label}
                         to={item.href}
                         onClick={() => setMobileOpen(false)}
-                        className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm text-secondary transition-colors hover:bg-surface-lighter hover:text-primary"
+                        className="flex items-center gap-3 rounded-2xl px-3 py-3 text-sm text-secondary transition-colors hover:bg-surface-lighter hover:text-primary focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
                       >
                         <Icon sx={{ fontSize: 18 }} />
                         {item.label}

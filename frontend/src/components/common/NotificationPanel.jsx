@@ -86,7 +86,7 @@ export default function NotificationPanel({ role: roleProp }) {
         aria-label="Open notifications"
         aria-expanded={open}
         onClick={() => setOpen(p => !p)}
-        className="relative p-2 rounded-xl hover:bg-surface-lighter text-secondary transition-colors"
+        className="relative p-2 rounded-xl hover:bg-surface-lighter text-secondary transition-colors focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
       >
         <CircleNotificationsOutlinedIcon fontSize="small" />
         {unreadCount > 0 && (
@@ -113,7 +113,7 @@ export default function NotificationPanel({ role: roleProp }) {
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="inline-flex items-center justify-center rounded-lg p-1.5 text-secondary hover:bg-surface-lighter hover:text-primary transition-colors"
+                  className="inline-flex items-center justify-center rounded-lg p-1.5 text-secondary hover:bg-surface-lighter hover:text-primary transition-colors focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
                   aria-label="Go back"
                 >
                   <ArrowBackRoundedIcon sx={{ fontSize: 16 }} />
@@ -129,7 +129,7 @@ export default function NotificationPanel({ role: roleProp }) {
                 <button
                   type="button"
                   onClick={markAllRead}
-                  className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1"
+                  className="text-xs font-medium text-primary hover:underline inline-flex items-center gap-1 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
                 >
                   <DoneAllOutlinedIcon sx={{ fontSize: 14 }} />
                   Mark all read

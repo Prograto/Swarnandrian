@@ -98,8 +98,8 @@ export default function DashboardLayout({ navItems, children, role }) {
 
   const Logo = () => (
     <div className="flex items-center gap-3 px-4 py-5 border-b border-theme">
-      <div className={`w-10 h-10 rounded-2xl bg-gradient-to-br ${rc.gradient} flex items-center justify-center shadow-glow shrink-0`}>
-        <img src="/logo.png" alt="Swarnandrian" className="h-8 w-8 rounded-xl object-cover" />
+      <div className="w-10 h-10 rounded-2xl bg-transparent flex items-center justify-center overflow-hidden shrink-0">
+        <img src="/logo.png" alt="Swarnandrian" className="h-full w-full object-cover" />
       </div>
       {(expanded || mobileOpen) && (
         <div className="min-w-0">
@@ -122,7 +122,7 @@ export default function DashboardLayout({ navItems, children, role }) {
             if (hasKids) setOpenDrop(isOpen ? null : item.label);
             else navigate(item.href);
           }}
-          className={`nav-link w-full text-left group ${isActive ? 'active' : ''}`}
+          className={`nav-link w-full text-left group focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${isActive ? 'active' : ''}`}
         >
           <span className="text-lg shrink-0 transition-transform group-hover:scale-110">{item.icon}</span>
           {(expanded || mobileOpen) && (
@@ -146,7 +146,7 @@ export default function DashboardLayout({ navItems, children, role }) {
               >
                 {item.children.map(c => (
                   <Link key={c.label} to={c.href}
-                    className={`nav-link text-xs py-2 ${location.pathname===c.href?'active':''}`}>
+                    className={`nav-link text-xs py-2 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 ${location.pathname===c.href?'active':''}`}>
                     <span className="text-sm">{c.icon}</span> {c.label}
                   </Link>
                 ))}
@@ -177,7 +177,7 @@ export default function DashboardLayout({ navItems, children, role }) {
           </div>
         )}
         <button onClick={handleLogout}
-          className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50/80 transition-all">
+          className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50/80 transition-all focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
           <LogoutRoundedIcon className="w-4 h-4 shrink-0"/>
           {(expanded || mobileOpen) && 'Logout'}
         </button>
@@ -192,7 +192,7 @@ export default function DashboardLayout({ navItems, children, role }) {
         <button
           type="button"
           onClick={() => setProfileOpen((prev) => !prev)}
-          className="flex items-center gap-2 rounded-xl border border-theme bg-surface-card px-2.5 py-1.5 hover:bg-surface-lighter transition-colors"
+          className="flex items-center gap-2 rounded-xl bg-surface-card px-2.5 py-1.5 hover:bg-surface-lighter transition-colors focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
         >
           <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${rc.gradient} flex items-center justify-center overflow-hidden text-white text-xs font-bold`}>
             {profilePreview ? <img src={profilePreview} alt={user?.name || 'Profile'} className="h-full w-full object-cover" /> : (user?.name?.[0]?.toUpperCase() || 'U')}
@@ -295,7 +295,7 @@ export default function DashboardLayout({ navItems, children, role }) {
       >
         <SidebarInner />
         <button onClick={() => setExpanded(!expanded)}
-          className="absolute bottom-20 -right-3 w-6 h-6 bg-surface-card border border-theme rounded-full shadow-soft flex items-center justify-center text-secondary hover:text-primary hover:border-primary/30 transition-all z-10"
+          className="absolute bottom-20 -right-3 w-6 h-6 bg-surface-card rounded-full shadow-soft flex items-center justify-center text-secondary hover:text-primary hover:border-primary/30 transition-all z-10 focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
           style={{ position:'sticky' }}>
           <span className="text-xs">{expanded ? '‹' : '›'}</span>
         </button>
@@ -321,7 +321,7 @@ export default function DashboardLayout({ navItems, children, role }) {
         <header className="bg-surface-light border-b border-theme px-4 md:px-6 py-3.5 flex items-center justify-between sticky top-0 z-20 lg:pr-8"
           style={{ boxShadow:'0 1px 12px rgba(2,8,23,0.04)' }}>
           <div className="flex items-center gap-3 min-w-0">
-            <button onClick={()=>setMobileOpen(true)} className="md:hidden p-2 rounded-xl hover:bg-surface-lighter text-secondary transition-colors">
+            <button onClick={()=>setMobileOpen(true)} className="md:hidden p-2 rounded-xl hover:bg-surface-lighter text-secondary transition-colors focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
               <MenuRoundedIcon className="w-5 h-5"/>
             </button>
             <div className="hidden sm:flex items-center gap-2 text-xs text-secondary">
@@ -360,7 +360,7 @@ export default function DashboardLayout({ navItems, children, role }) {
               type="button"
               onClick={toggleTheme}
               aria-label="Toggle theme"
-              className="p-2 rounded-xl hover:bg-surface-lighter text-secondary transition-colors"
+              className="p-2 rounded-xl hover:bg-surface-lighter text-secondary transition-colors focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
             >
               {isDark ? <LightModeOutlinedIcon sx={{ fontSize: 18 }} /> : <DarkModeOutlinedIcon sx={{ fontSize: 18 }} />}
             </button>
@@ -369,7 +369,7 @@ export default function DashboardLayout({ navItems, children, role }) {
                 to="/faculty/notifications"
                 title="Send notification"
                 aria-label="Send notification"
-                className="p-2 rounded-xl hover:bg-pink-50 text-pink-600 transition-colors"
+                className="p-2 rounded-xl hover:bg-pink-50 text-pink-600 transition-colors focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0"
               >
                 <CampaignOutlinedIcon sx={{ fontSize: 18 }} />
               </Link>
@@ -380,7 +380,7 @@ export default function DashboardLayout({ navItems, children, role }) {
               <AutoAwesomeOutlinedIcon sx={{ fontSize: 14 }} />
               <span>Smart suggestions enabled</span>
             </div>
-            <button className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-theme hover:bg-surface-lighter text-xs font-medium text-secondary">
+            <button className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-surface-lighter text-xs font-medium text-secondary focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0">
               <BoltOutlinedIcon sx={{ fontSize: 14 }} />
               Quick action
             </button>
