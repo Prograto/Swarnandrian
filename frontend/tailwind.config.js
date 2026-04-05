@@ -1,0 +1,78 @@
+/** @type {import('tailwindcss').Config} */
+module.exports = {
+  darkMode: 'class',
+  content: ['./src/**/*.{js,jsx,ts,tsx}'],
+  theme: {
+    extend: {
+      colors: {
+        primary:  {
+          50:  '#EEF4FF',
+          100: '#DCE8FF',
+          200: '#B9CEFF',
+          300: '#90B0FF',
+          400: '#638FFF',
+          500: '#4F7CF3',
+          600: '#4368DC',
+          700: '#3752BB',
+          800: '#2F4594',
+          900: '#25376F',
+          950: '#182448',
+          DEFAULT:'#4F7CF3',
+          soft:'#7C8CFF',
+          light:'#EEF3FF',
+        },
+        pastel:   { pink:'#F6B8C6', yellow:'#F7E3A6', mint:'#CDEDE1', lavender:'#E6E4F8' },
+        surface:  {
+          DEFAULT: 'rgb(var(--bg-primary) / <alpha-value>)',
+          light:   'rgb(var(--bg-secondary) / <alpha-value>)',
+          lighter: 'rgb(var(--bg-tertiary) / <alpha-value>)',
+          card:    'rgb(var(--bg-card) / <alpha-value>)',
+          border:  'rgb(var(--border-color) / <alpha-value>)',
+        },
+        text: {
+          primary:   'rgb(var(--text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--text-secondary) / <alpha-value>)',
+          muted:     'rgb(var(--text-muted) / <alpha-value>)',
+        },
+        accent:  'rgb(var(--accent-color) / <alpha-value>)',
+        dark:     { start:'#0B0F2B', end:'#1F2A78' },
+      },
+      fontFamily: {
+        sans:    ["'Plus Jakarta Sans'","'Inter'","sans-serif"],
+        display: ["'Plus Jakarta Sans'","sans-serif"],
+        body:    ["'Inter'","sans-serif"],
+        mono:    ["'JetBrains Mono'","monospace"],
+      },
+      borderRadius: { '2xl':'1rem','3xl':'1.5rem','4xl':'2rem' },
+      boxShadow: {
+        card:  '0 1px 6px rgba(15,23,42,0.06)',
+        blue:  '0 4px 14px rgba(79,124,243,0.35)',
+        lift:  '0 12px 32px rgba(79,124,243,0.12)',
+        modal: '0 24px 64px rgba(15,23,42,0.12)',
+      },
+      backgroundImage: {
+        'hero':  'linear-gradient(135deg,#4F7CF3 0%,#7C8CFF 50%,#9B8FFF 100%)',
+        'dark':  'linear-gradient(135deg,#0B0F2B 0%,#1F2A78 100%)',
+        'card-lavender': 'linear-gradient(135deg,#E6E4F8,#F0F0FF)',
+        'card-mint':     'linear-gradient(135deg,#CDEDE1,#DFFAF0)',
+        'card-pink':     'linear-gradient(135deg,#F6B8C6,#FFD6E0)',
+        'card-yellow':   'linear-gradient(135deg,#F7E3A6,#FFF3CC)',
+      },
+      animation: {
+        'float':     'float 3s ease-in-out infinite',
+        'slide-up':  'slideUp 0.4s ease forwards',
+        'scale-in':  'scaleIn 0.2s ease forwards',
+        'gradient':  'gradientShift 6s ease infinite',
+        'pulse-live':'pulseLive 2s infinite',
+      },
+      keyframes: {
+        float:         { '0%,100%':{transform:'translateY(0)'},'50%':{transform:'translateY(-8px)'} },
+        slideUp:       { from:{opacity:0,transform:'translateY(20px)'},to:{opacity:1,transform:'translateY(0)'} },
+        scaleIn:       { from:{opacity:0,transform:'scale(0.95)'},to:{opacity:1,transform:'scale(1)'} },
+        gradientShift: { '0%,100%':{backgroundPosition:'0% 50%'},'50%':{backgroundPosition:'100% 50%'} },
+        pulseLive:     { '0%,100%':{boxShadow:'0 0 0 0 rgba(16,185,129,0.4)'},'50%':{boxShadow:'0 0 0 6px rgba(16,185,129,0)'} },
+      },
+    },
+  },
+  plugins: [],
+};
