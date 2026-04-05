@@ -130,6 +130,8 @@ async def submit_code(
                 raise HTTPException(403, "This coding section is not available for your branch")
         section_name = section.get("name")
 
+    is_submit = data.mode == "submit"
+
     public_cases = [
         {"input": problem["sample_input_1"], "expected": problem["sample_output_1"]},
         {"input": problem["sample_input_2"], "expected": problem["sample_output_2"]},
@@ -139,8 +141,10 @@ async def submit_code(
     all_cases = []
     for i, c in enumerate(public_cases, 1):
         all_cases.append({"number": i, "input": c["input"], "expected": c["expected"], "is_private": False})
-    for i, c in enumerate(private_cases, len(public_cases) + 1):
-        all_cases.append({"number": i, "input": c["input"], "expected": c["expected_output"], "is_private": True})
+
+    if is_submit:
+        for i, c in enumerate(private_cases, len(public_cases) + 1):
+            all_cases.append({"number": i, "input": c["input"], "expected": c["expected_output"], "is_private": True})
 
     run_payload = {
         "language": data.language,
@@ -188,7 +192,7 @@ async def submit_code(
     elif result.get("mle"):
         overall_status = SubmissionStatus.MLE
 
-    score = problem.get("marks", 0) if all_passed else 0
+    score = problem.get("marks", 0) if (is_submit and all_passed) else 0
 
     submission_doc = {
         "problem_id": data.problem_id,
@@ -213,7 +217,7 @@ async def submit_code(
         "submitted_at": datetime.utcnow(),
     }
 
-    if data.mode == "submit":
+    if is_submit:
         inserted = await db.code_submissions.insert_one(submission_doc)
         submission_doc["id"] = str(inserted.inserted_id)
         # PyMongo mutates inserted docs by adding _id (ObjectId), which is not JSON-serializable.
@@ -457,20 +461,3 @@ async def submit_aptitude(
     if exam_mode == "practice":
         response["detail"] = result_detail
     return response
-
-
-async def _update_leaderboard(db, student_id: str, section: str, score: float):
-    existing = await db.leaderboard.find_one({"student_id": student_id, "section": section})
-    if existing:
-        if score > existing.get("score", 0):
-            await db.leaderboard.update_one(
-                {"student_id": student_id, "section": section},
-                {"$set": {"score": score, "updated_at": datetime.utcnow()}},
-            )
-    else:
-        await db.leaderboard.insert_one({
-            "student_id": student_id,
-            "section": section,
-            "score": score,
-            "updated_at": datetime.utcnow(),
-        })
