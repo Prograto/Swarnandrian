@@ -29,7 +29,20 @@ class Settings(BaseSettings):
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS_STR.split(",") if o.strip()]
+        origins = [o.strip().rstrip("/") for o in self.ALLOWED_ORIGINS_STR.split(",") if o.strip()]
+
+        frontend_url = self.FRONTEND_URL.strip().rstrip("/")
+        if frontend_url:
+            origins.append(frontend_url)
+
+        unique_origins = []
+        seen = set()
+        for origin in origins:
+            if origin not in seen:
+                seen.add(origin)
+                unique_origins.append(origin)
+
+        return unique_origins
 
     FRONTEND_URL: str = "http://localhost:3000"
 

@@ -153,8 +153,10 @@ async def submit_code(
 
     try:
         result = await _call_code_runner(run_payload)
-    except Exception as e:
-        raise HTTPException(500, f"Code execution service error: {e}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Code execution service error") from exc
 
     # Build test results (hide private expected/actual output)
     test_results = []
