@@ -8,6 +8,7 @@ from app.db.mongodb import get_db
 from app.models.schemas import CodeSubmitRequest, SubmissionStatus
 from app.core.config import settings
 from app.core.websocket_manager import ws_manager
+from app.utils.stats import get_best_submission_score, refresh_student_stats
 
 router = APIRouter()
 
@@ -26,6 +27,8 @@ async def _update_leaderboard(
     student_id: str,
     section_type: str,
     score: float,
+    submission_collection: str,
+    submission_match: dict,
     section_id: str | None = None,
     test_id: str | None = None,
     section_name: str | None = None,
@@ -37,33 +40,32 @@ async def _update_leaderboard(
     if test_id:
         query["test_id"] = test_id
 
-    payload = {
-        "student_id": student_id,
-        "section_type": section_type,
-        "score": max(0, score),
-        "updated_at": datetime.utcnow(),
+    best_score = await get_best_submission_score(db, submission_collection, submission_match)
+
+    update_payload = {
+        "$set": {
+            "student_id": student_id,
+            "section_type": section_type,
+            "score": best_score,
+            "updated_at": datetime.utcnow(),
+        },
+        "$setOnInsert": {
+            "created_at": datetime.utcnow(),
+        },
+        "$inc": {
+            "attempts": 1,
+        },
     }
     if section_id:
-        payload["section_id"] = section_id
+        update_payload["$set"]["section_id"] = section_id
     if test_id:
-        payload["test_id"] = test_id
+        update_payload["$set"]["test_id"] = test_id
     if section_name:
-        payload["section_name"] = section_name
+        update_payload["$set"]["section_name"] = section_name
     if test_name:
-        payload["test_name"] = test_name
+        update_payload["$set"]["test_name"] = test_name
 
-    existing = await db.leaderboard.find_one(query)
-    if existing:
-        if max(0, score) > existing.get("score", 0):
-            update_payload = {"score": max(0, score), "updated_at": datetime.utcnow()}
-            if section_name is not None:
-                update_payload["section_name"] = section_name
-            if test_name is not None:
-                update_payload["test_name"] = test_name
-            await db.leaderboard.update_one(query, {"$set": update_payload})
-        return
-
-    await db.leaderboard.insert_one(payload)
+    await db.leaderboard.update_one(query, update_payload, upsert=True)
 
 
 async def _call_code_runner(payload: dict) -> dict:
@@ -225,15 +227,13 @@ async def submit_code(
 
         # Update student stats if accepted
         if overall_status == SubmissionStatus.ACCEPTED:
-            await db.students.update_one(
-                {"_id": ObjectId(user["id"])},
-                {"$inc": {"stats.total_score": score, "stats.problems_solved": 1}},
-            )
             await _update_leaderboard(
                 db,
                 user["id"],
                 "coding",
                 score,
+                "code_submissions",
+                {"student_id": user["id"], "problem_id": data.problem_id},
                 section_id=problem.get("section_id"),
                 test_id=problem.get("problem_id"),
                 section_name=section_name,
@@ -241,6 +241,8 @@ async def submit_code(
             )
             # Broadcast leaderboard update
             await ws_manager.broadcast("leaderboard", {"type": "score_update", "student_id": user["id"]})
+
+            await refresh_student_stats(db, user["id"])
     else:
         submission_doc.pop("_id", None)
 
@@ -438,11 +440,6 @@ async def submit_aptitude(
 
     inserted = await db.apt_submissions.insert_one(submission)
 
-    await db.students.update_one(
-        {"_id": ObjectId(user["id"])} ,
-        {"$inc": {"stats.tests_attempted": 1, **({"stats.total_score": max(0, score)} if exam_mode == "competitor" else {})}},
-    )
-
     # Only competitor mode affects leaderboard.
     if exam_mode == "competitor":
         await _update_leaderboard(
@@ -450,12 +447,16 @@ async def submit_aptitude(
             user["id"],
             test.get("section_type", "aptitude"),
             max(0, score),
+            "apt_submissions",
+            {"student_id": user["id"], "test_id": test_id, "exam_type": "competitor"},
             section_id=test.get("section_id"),
             test_id=test_id,
             section_name=section_name,
             test_name=test.get("name"),
         )
         await ws_manager.broadcast("leaderboard", {"type": "score_update"})
+
+    await refresh_student_stats(db, user["id"])
 
     response = {"id": str(inserted.inserted_id), "score": max(0, score)}
     if exam_mode == "practice":

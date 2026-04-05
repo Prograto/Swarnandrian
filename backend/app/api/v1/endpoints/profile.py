@@ -216,9 +216,14 @@ async def _build_achievement_snapshot(db, student_id: str):
     if competition_subs:
         comp_pipeline = [
             {"$group": {
-                "_id": {"competition_id": "$competition_id", "student_id": "$student_id"},
-                "score": {"$sum": "$score"},
+                "_id": {"competition_id": "$competition_id", "student_id": "$student_id", "test_id": "$test_id"},
+                "best_score": {"$max": {"$ifNull": ["$score", 0]}},
                 "latest": {"$max": "$submitted_at"},
+            }},
+            {"$group": {
+                "_id": {"competition_id": "$_id.competition_id", "student_id": "$_id.student_id"},
+                "score": {"$sum": "$best_score"},
+                "latest": {"$max": "$latest"},
             }},
         ]
         comp_rows = await db.competition_submissions.aggregate(comp_pipeline).to_list(10000)

@@ -48,7 +48,7 @@ function TestCaseResult({ tc }) {
         </span>
         <span className={`badge ${statusBadge}`}>{tc.status.toUpperCase()}</span>
       </div>
-      {!tc.is_private && tc.status !== 'passed' && (
+      {!tc.is_private && (
         <div className="grid grid-cols-2 gap-2 mt-2">
           <div>
             <p className="text-xs text-slate-500 mb-1">Expected Output</p>

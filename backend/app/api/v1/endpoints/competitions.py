@@ -5,10 +5,20 @@ from app.core.security import require_faculty, get_current_user
 from app.core.websocket_manager import ws_manager
 from app.db.mongodb import get_db
 from app.models.schemas import CompetitionCreate, CompetitionTestCreate
+from app.utils.stats import get_best_submission_score, refresh_student_stats
 
 router = APIRouter()
-async def _upsert_general_leaderboard(db, student_id: str, score: float, competition: dict, test: dict) -> None:
-    score_value = max(0, float(score or 0))
+async def _upsert_general_leaderboard(db, student_id: str, competition: dict, test: dict) -> None:
+    score_value = await get_best_submission_score(
+        db,
+        "competition_submissions",
+        {
+            "competition_id": str(competition["_id"]),
+            "test_id": str(test["_id"]),
+            "student_id": student_id,
+        },
+    )
+
     await db.leaderboard.update_one(
         {
             "student_id": student_id,
@@ -25,6 +35,7 @@ async def _upsert_general_leaderboard(db, student_id: str, score: float, competi
                 "section": competition.get("name"),
                 "test_id": str(test["_id"]),
                 "test_name": test.get("name"),
+                "score": score_value,
                 "updated_at": datetime.utcnow(),
             },
             "$setOnInsert": {
@@ -32,7 +43,6 @@ async def _upsert_general_leaderboard(db, student_id: str, score: float, competi
                 "attempts": 0,
             },
             "$inc": {
-                "score": score_value,
                 "attempts": 1,
             },
         },
@@ -495,13 +505,10 @@ async def submit_competition_test(
     }
     inserted = await db.competition_submissions.insert_one(submission)
 
-    await _upsert_general_leaderboard(db, user["id"], score, comp, test)
+    await _upsert_general_leaderboard(db, user["id"], comp, test)
     await ws_manager.broadcast("leaderboard", {"type": "score_update", "student_id": user["id"]})
 
-    await db.students.update_one(
-        {"_id": ObjectId(user["id"])} ,
-        {"$inc": {"stats.tests_attempted": 1, "stats.total_score": max(0, score)}},
-    )
+    await refresh_student_stats(db, user["id"])
 
     return {
         "id": str(inserted.inserted_id),
@@ -513,7 +520,13 @@ async def submit_competition_test(
 async def competition_leaderboard(comp_id: str, db=Depends(get_db), _=Depends(get_current_user)):
     pipeline = [
         {"$match": {"competition_id": comp_id}},
-        {"$group": {"_id": "$student_id", "total": {"$sum": "$score"}}},
+        {
+            "$group": {
+                "_id": {"student_id": "$student_id", "test_id": "$test_id"},
+                "best_score": {"$max": {"$ifNull": ["$score", 0]}},
+            }
+        },
+        {"$group": {"_id": "$_id.student_id", "total": {"$sum": "$best_score"}}},
         {"$sort": {"total": -1}},
         {"$limit": 100},
     ]

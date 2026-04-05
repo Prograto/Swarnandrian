@@ -87,6 +87,10 @@ HEALTH_CHECK_BINARIES = {
     "javascript": "node",
 }
 
+
+def _normalize_output(text: str) -> str:
+    return text.replace("\r\n", "\n").rstrip("\n")
+
 # ─── Pydantic models ─────────────────────────────────────────────────────────
 class TestCase(BaseModel):
     number:     int
@@ -166,7 +170,7 @@ def _run_one_testcase(
 
         elapsed_ms = (time.perf_counter() - start) * 1000
 
-        stdout = proc.stdout.decode("utf-8", errors="replace").strip()
+        stdout = proc.stdout.decode("utf-8", errors="replace").rstrip("\r\n")
         stderr = proc.stderr.decode("utf-8", errors="replace").strip()
 
         if proc.returncode != 0 and stderr:
@@ -246,7 +250,7 @@ def execute(req: ExecuteRequest, x_internal_secret: str = Header(...)):
 
         # ── Normal: compare output
         actual = result.get("actual", "")
-        passed = actual.strip() == tc.expected.strip()
+        passed = _normalize_output(actual) == _normalize_output(tc.expected)
         test_results.append(TestResult(
             number=tc.number,
             is_private=tc.is_private,

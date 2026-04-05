@@ -109,10 +109,18 @@ export default function StudentResults() {
     [...codingSubmissions, ...testSubmissions, ...competitionSubmissions].forEach((submission) => {
       const label = submission.section_name || submission.test_name || submission.problem_name || submission.name || submission.section_type || 'Unknown';
       const type = submission.section_type || (submission.problem_id ? 'coding' : 'test');
-      const key = `${type}:${label}`;
-      const current = groups.get(key) || { label, type, attempts: 0, score: 0, latest: null };
+      const entityId = submission.problem_id
+        ? `problem:${submission.problem_id}`
+        : submission.competition_id && submission.test_id
+          ? `competition:${submission.competition_id}:${submission.test_id}`
+          : submission.test_id
+            ? `test:${submission.test_id}`
+            : label;
+      const key = `${type}:${entityId}`;
+      const current = groups.get(key) || { label, type, attempts: 0, bestScore: 0, latest: null };
+      const score = Number(submission.score || submission.marks || 0);
       current.attempts += 1;
-      current.score += Number(submission.score || submission.marks || 0);
+      current.bestScore = Math.max(current.bestScore, score);
       if (!current.latest || new Date(submission.submitted_at) > new Date(current.latest)) {
         current.latest = submission.submitted_at;
       }
@@ -120,8 +128,64 @@ export default function StudentResults() {
     });
 
     return Array.from(groups.values())
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => b.bestScore - a.bestScore)
       .slice(0, 6);
+  }, [codingSubmissions, testSubmissions, competitionSubmissions]);
+
+  const scoreSummary = useMemo(() => {
+    const practiceBest = new Map();
+    const competitorBest = new Map();
+    const codingBest = new Map();
+    const aptitudeBest = new Map();
+    const technicalBest = new Map();
+
+    const addBest = (map, key, score) => {
+      const nextScore = Math.max(0, Number(score || 0));
+      const currentScore = map.get(key) || 0;
+      if (nextScore > currentScore) {
+        map.set(key, nextScore);
+      }
+    };
+
+    const getItemKey = (submission) => {
+      if (submission.problem_id) return `problem:${submission.problem_id}`;
+      if (submission.competition_id && submission.test_id) return `competition:${submission.competition_id}:${submission.test_id}`;
+      if (submission.test_id) return `test:${submission.test_id}`;
+      return `submission:${submission.id || submission.submitted_at || submission.name || submission.problem_name || submission.test_name || 'unknown'}`;
+    };
+
+    const allHistory = [...codingSubmissions, ...testSubmissions, ...competitionSubmissions];
+    allHistory.forEach((submission) => {
+      const score = Number(submission.score || submission.marks || 0);
+      const examType = submission.exam_type || 'practice';
+      const sectionType = submission.section_type || (submission.problem_id ? 'coding' : 'test');
+      const itemKey = getItemKey(submission);
+
+      if (examType === 'practice') {
+        addBest(practiceBest, itemKey, score);
+      }
+      if (examType === 'competitor') {
+        addBest(competitorBest, itemKey, score);
+      }
+
+      if (sectionType === 'coding') {
+        addBest(codingBest, itemKey, score);
+      } else if (sectionType === 'aptitude') {
+        addBest(aptitudeBest, itemKey, score);
+      } else if (sectionType === 'technical') {
+        addBest(technicalBest, itemKey, score);
+      }
+    });
+
+    const sumMap = (map) => Array.from(map.values()).reduce((total, value) => total + value, 0);
+
+    return {
+      practice: sumMap(practiceBest),
+      competitor: sumMap(competitorBest),
+      coding: sumMap(codingBest),
+      aptitude: sumMap(aptitudeBest),
+      technical: sumMap(technicalBest),
+    };
   }, [codingSubmissions, testSubmissions, competitionSubmissions]);
 
   const stats = {
@@ -281,12 +345,36 @@ export default function StudentResults() {
             ))}
           </div>
 
+          <div className="mb-6 rounded-2xl border border-theme bg-surface-card p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-secondary">Score summary</p>
+                <p className="text-sm text-secondary mt-1">Best score per problem or test, split by mode and section</p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {[
+                { label: 'Practice Mode', value: scoreSummary.practice, helper: 'Best valid score in practice mode' },
+                { label: 'Competitor Mode', value: scoreSummary.competitor, helper: 'Best valid score in competitor mode' },
+                { label: 'Coding', value: scoreSummary.coding, helper: 'Best coding score across attempts' },
+                { label: 'Aptitude', value: scoreSummary.aptitude, helper: 'Best aptitude score across attempts' },
+                { label: 'Technical', value: scoreSummary.technical, helper: 'Best technical score across attempts' },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl border border-theme bg-surface p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-secondary">{item.label}</p>
+                  <p className="mt-2 text-2xl font-bold text-primary">{item.value}</p>
+                  <p className="mt-1 text-xs text-secondary">{item.helper}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* Section breakdown */}
           <div className="mb-6 rounded-2xl border border-theme bg-surface-card p-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-secondary">Section breakdown</p>
-                <p className="text-sm text-secondary mt-1">Quick snapshot of your highest activity areas</p>
+                <p className="text-sm text-secondary mt-1">Quick snapshot of your best scoring areas</p>
               </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -304,8 +392,8 @@ export default function StudentResults() {
                     <span className="badge bg-surface-lighter text-secondary">{item.attempts} attempts</span>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3 text-sm">
-                    <span className="text-secondary">Score</span>
-                    <span className="font-bold text-amber-600">{item.score}</span>
+                    <span className="text-secondary">Best score</span>
+                    <span className="font-bold text-amber-600">{item.bestScore}</span>
                   </div>
                   {item.latest && <p className="mt-1 text-xs text-secondary">Latest: {new Date(item.latest).toLocaleString()}</p>}
                 </div>
