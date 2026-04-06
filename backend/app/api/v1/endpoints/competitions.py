@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from datetime import datetime, timezone
 from bson import ObjectId
+from app.core.access import student_access_clauses, student_matches_access
 from app.core.security import require_faculty, get_current_user
 from app.core.websocket_manager import ws_manager
 from app.db.mongodb import get_db
@@ -8,6 +9,25 @@ from app.models.schemas import CompetitionCreate, CompetitionTestCreate
 from app.utils.stats import get_best_submission_score, refresh_student_stats
 
 router = APIRouter()
+
+
+def _normalize_selected_answers(answer):
+    if answer is None:
+        return []
+
+    if isinstance(answer, (list, tuple, set)):
+        raw_values = answer
+    else:
+        raw_values = [answer]
+
+    normalized = []
+    for value in raw_values:
+        try:
+            normalized.append(int(value))
+        except (TypeError, ValueError):
+            normalized.append(value)
+
+    return normalized
 async def _upsert_general_leaderboard(db, student_id: str, competition: dict, test: dict) -> None:
     score_value = await get_best_submission_score(
         db,
@@ -104,6 +124,9 @@ async def list_competitions(
     query = {}
     if user["role"] == "student":
         query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            query["$and"] = access_clauses
 
     comps = await db.competitions.find(query).to_list(200)
     result = []
@@ -146,6 +169,8 @@ async def get_competition(comp_id: str, db=Depends(get_db), _=Depends(get_curren
     except Exception:
         raise HTTPException(400, "Invalid competition ID")
     if not comp:
+        raise HTTPException(404, "Competition not found")
+    if _.get("role") == "student" and (not comp.get("is_active", True) or not student_matches_access(_, comp)):
         raise HTTPException(404, "Competition not found")
     comp["id"] = str(comp.pop("_id"))
     comp["status"] = _get_status(comp)
@@ -252,6 +277,8 @@ async def list_competition_tests(
         raise HTTPException(404, "Competition not found")
     if user.get("role") == "student" and not comp.get("is_active"):
         raise HTTPException(403, "Competition is not active")
+    if user.get("role") == "student" and not student_matches_access(user, comp):
+        raise HTTPException(404, "Competition not found")
 
     if user.get("role") == "student":
         participant = await db.competition_participants.find_one(
@@ -272,11 +299,11 @@ async def list_competition_tests(
     test_query = {"competition_id": comp_id}
     if user.get("role") == "student":
         test_query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            test_query["$and"] = access_clauses
 
     tests = await db.competition_tests.find(test_query).sort("created_at", -1).to_list(500)
-    student_branch = user.get("branch") or user.get("department")
-    if user.get("role") == "student" and student_branch:
-        tests = [test for test in tests if not test.get("branch") or test.get("branch") == student_branch]
 
     needle = (search or "").strip().lower()
     if needle:
@@ -418,6 +445,11 @@ async def get_competition_test_attempt(comp_id: str, test_id: str, db=Depends(ge
     if test.get("test_type") not in ("aptitude", "technical"):
         raise HTTPException(400, "Only aptitude/technical competition tests are supported here")
 
+    prev_attempts = await db.competition_submissions.count_documents(
+        {"competition_id": comp_id, "test_id": test_id, "student_id": user["id"]}
+    )
+    max_attempts = int(comp.get("max_attempts") or 1)
+
     projection = {"correct_options": 0, "correct_answer": 0, "explanation": 0}
     question_ids = [ObjectId(qid) for qid in test.get("question_ids", []) if ObjectId.is_valid(qid)]
     questions = await db.apt_questions.find({"_id": {"$in": question_ids}, "is_active": True}, projection).to_list(500)
@@ -430,6 +462,9 @@ async def get_competition_test_attempt(comp_id: str, test_id: str, db=Depends(ge
         "description": test.get("description"),
         "test_type": test.get("test_type"),
         "time_limit_minutes": test.get("time_limit_minutes") or 60,
+        "max_attempts": max_attempts,
+        "attempts_used": prev_attempts,
+        "attempts_remaining": max(0, max_attempts - prev_attempts),
         "questions": questions,
         "competition_id": comp_id,
     }
@@ -482,7 +517,7 @@ async def submit_competition_test(
         correct = False
 
         if q.get("question_type") in ("mcq", "msq"):
-            correct = set(student_ans or []) == set(q.get("correct_options", []))
+            correct = set(_normalize_selected_answers(student_ans)) == set(q.get("correct_options", []))
         elif q.get("question_type") in ("nat", "fill"):
             correct = str(student_ans or "").strip().lower() == str(q.get("correct_answer", "")).strip().lower()
 

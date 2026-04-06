@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import Lenis from 'lenis';
@@ -143,7 +143,11 @@ function StudentShell({ children }) {
 // Show chatbot for logged-in students and faculty
 function ChatbotGate() {
   const { user } = useAuthStore();
+  const location = useLocation();
   if (!user || user.role === 'admin') return null;
+  const pathname = location.pathname;
+  const onExamRoute = /^\/test\/[^/]+$/.test(pathname) || /^\/student\/competitions\/[^/]+\/tests\/[^/]+$/.test(pathname);
+  if (onExamRoute) return null;
   return <ChatbotWidget />;
 }
 

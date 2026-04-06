@@ -103,7 +103,7 @@ export default function StudentTechnical() {
                   <p className="text-xs text-secondary mt-1 line-clamp-2">{section.description || 'Technical concept questions.'}</p>
                 </div>
                 <div className="flex items-center gap-2 mt-auto text-xs text-secondary">
-                  <SettingsRoundedIcon sx={{ fontSize: 14 }} />{section.question_count || 0} Question{(section.question_count || 0) !== 1 ? 's' : ''}
+                  <SettingsRoundedIcon sx={{ fontSize: 14 }} />{(section.test_count ?? section.question_count ?? 0)} Test{(section.test_count ?? section.question_count ?? 0) !== 1 ? 's' : ''}
                 </div>
                 <Link to={`/student/technical/${mode}/section/${section.id}`}
                   className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-semibold text-white group-hover:shadow-md transition-all"

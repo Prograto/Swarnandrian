@@ -4,6 +4,7 @@ import { useQuery, useMutation } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import { getApiErrorMessage } from '../../utils/apiError';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
@@ -53,6 +54,13 @@ export default function TestInterface() {
   const answersRef = useRef({});
   const submittedRef = useRef(false);
   const autoSubmitLockRef = useRef(false);
+  const violationCountRef = useRef(0);
+
+  const exitFullscreen = useCallback(() => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
 
   const fetchTest = useCallback(async () => {
     const sectionTypes = sectionTypeHint ? [sectionTypeHint] : ['aptitude', 'technical'];
@@ -71,7 +79,7 @@ export default function TestInterface() {
     throw new Error('Test not found');
   }, [sectionTypeHint, testId]);
 
-  const { data: test, isLoading } = useQuery(
+  const { data: test, isLoading, isFetching: isTestFetching, refetch: refetchTest } = useQuery(
     ['test', testId, sectionTypeHint || 'auto'],
     fetchTest,
     {
@@ -84,14 +92,30 @@ export default function TestInterface() {
     }
   );
 
+  const attemptsRemaining = test?.attempts_remaining;
+  const hasAttemptLimit = attemptsRemaining !== null && attemptsRemaining !== undefined;
+  const attemptLimitReached = hasAttemptLimit && Number(attemptsRemaining) <= 0;
+  const maxViolations = Math.max(1, Number(test?.max_violations) || 3);
+
   const submitMut = useMutation(
     ({ currentAnswers, timeTakenMs }) => api.post(`/submissions/aptitude`, currentAnswers, { params: { test_id: testId, time_taken_ms: timeTakenMs } }),
     {
       onSuccess: (data) => {
+        submittedRef.current = true;
+        exitFullscreen();
         setSubmitted(true);
         toast.success(`Test submitted! Score: ${data.data.score}`);
       },
-      onError: () => toast.error('Submission failed'),
+      onError: (error) => {
+        if (error?.response?.status === 429) {
+          void refetchTest();
+          exitFullscreen();
+          toast.error('You have used all allowed attempts for this test.');
+          return;
+        }
+
+        toast.error(getApiErrorMessage(error, 'Submission failed'));
+      },
       onSettled: () => {
         autoSubmitLockRef.current = false;
       },
@@ -111,14 +135,65 @@ export default function TestInterface() {
 
   useEffect(() => {
     if (!submitted) return;
-    if (document.fullscreenElement && document.exitFullscreen) {
-      document.exitFullscreen().catch(() => {});
+    exitFullscreen();
+  }, [exitFullscreen, submitted]);
+
+  useEffect(() => {
+    if (attemptLimitReached) {
+      exitFullscreen();
     }
-  }, [submitted]);
+  }, [attemptLimitReached, exitFullscreen]);
+
+  const handleAutoSubmit = useCallback(async () => {
+    if (attemptLimitReached || submittedRef.current || autoSubmitLockRef.current) return;
+    autoSubmitLockRef.current = true;
+
+    if (hasAttemptLimit) {
+      try {
+        const latestTest = await refetchTest();
+        const latestAttemptsRemaining = latestTest.data?.attempts_remaining;
+        const latestAttemptLimitReached = latestAttemptsRemaining !== null && latestAttemptsRemaining !== undefined && Number(latestAttemptsRemaining) <= 0;
+
+        if (latestAttemptLimitReached) {
+          exitFullscreen();
+          toast.error('You have used all allowed attempts for this test.');
+          autoSubmitLockRef.current = false;
+          return;
+        }
+      } catch (error) {
+        autoSubmitLockRef.current = false;
+        toast.error(getApiErrorMessage(error, 'Unable to verify remaining attempts'));
+        return;
+      }
+    }
+
+    submitMut.mutate({
+      currentAnswers: answersRef.current,
+      timeTakenMs: Math.max(0, Date.now() - startedAtRef.current),
+    });
+  }, [attemptLimitReached, exitFullscreen, hasAttemptLimit, refetchTest, submitMut]);
+
+  const registerViolation = useCallback((reason) => {
+    const next = violationCountRef.current + 1;
+    violationCountRef.current = next;
+    setTabWarn(next);
+
+    if (next >= maxViolations) {
+      setShowWarn(false);
+      toast.error(`Maximum ${reason.toLowerCase()} violations reached (${next}/${maxViolations}). Auto-submitting!`);
+      void handleAutoSubmit();
+    } else {
+      setShowWarn(true);
+      toast.error(`${reason} detected. Warning ${next}/${maxViolations}`);
+    }
+
+    return next;
+  }, [handleAutoSubmit, maxViolations]);
 
   // ── Anti-cheat: Fullscreen enforcement ──────────────────────────
   useEffect(() => {
     const requestFS = () => {
+      if (submittedRef.current || attemptLimitReached) return;
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
       }
@@ -126,38 +201,37 @@ export default function TestInterface() {
     requestFS();
 
     const onFSChange = () => {
+      if (submittedRef.current || attemptLimitReached) {
+        setFSLost(false);
+        return;
+      }
       if (!document.fullscreenElement) {
         setFSLost(true);
-        setTabWarn(w => w + 1);
-        setTimeout(requestFS, 1000);
+        const next = registerViolation('Fullscreen exit');
+        if (next < maxViolations) {
+          setTimeout(requestFS, 1000);
+        }
       } else {
         setFSLost(false);
       }
     };
     document.addEventListener('fullscreenchange', onFSChange);
-    return () => document.removeEventListener('fullscreenchange', onFSChange);
-  }, []);
+    return () => {
+      document.removeEventListener('fullscreenchange', onFSChange);
+      exitFullscreen();
+    };
+  }, [attemptLimitReached, exitFullscreen]);
 
   // ── Anti-cheat: Tab switch detection ───────────────────────────
   useEffect(() => {
     const onVisibility = () => {
       if (document.hidden && !submitted) {
-        setTabWarn(w => {
-          const next = w + 1;
-          if (next >= 3) {
-            toast.error('Maximum tab switches reached. Auto-submitting!');
-            handleAutoSubmit();
-          } else {
-            setShowWarn(true);
-            toast.error(`Tab switch detected. Warning ${next}/3`);
-          }
-          return next;
-        });
+        registerViolation('Tab switch');
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [submitted]);
+  }, [registerViolation, submitted]);
 
   // ── Anti-cheat: Right click + copy disabled ──────────────────────
   useEffect(() => {
@@ -172,14 +246,8 @@ export default function TestInterface() {
     };
   }, []);
 
-  const handleAutoSubmit = useCallback(() => {
-    if (submittedRef.current || autoSubmitLockRef.current) return;
-    autoSubmitLockRef.current = true;
-    submitMut.mutate({
-      currentAnswers: answersRef.current,
-      timeTakenMs: Math.max(0, Date.now() - startedAtRef.current),
-    });
-  }, [submitMut]);
+  const questions = test?.questions || [];
+  const q = questions[currentQ];
 
   const handleAnswer = (qId, value, type) => {
     setAnswers(prev => {
@@ -195,9 +263,6 @@ export default function TestInterface() {
       return { ...prev, [qId]: value };
     });
   };
-
-  const questions = test?.questions || [];
-  const q = questions[currentQ];
 
   if (isLoading) return (
     <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -258,6 +323,38 @@ export default function TestInterface() {
     </div>
   );
 
+  if (attemptLimitReached) return (
+    <div className="min-h-screen bg-surface flex items-center justify-center px-4 py-8">
+      <div className="card w-full max-w-2xl p-6 sm:p-8 space-y-5 text-center">
+        <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 mx-auto">
+          Attempts exhausted
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl sm:text-3xl font-display font-bold text-primary">{test?.name}</h1>
+          <p className="text-secondary">You have used all allowed attempts for this test. Writing is disabled.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-theme bg-surface-lighter/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-secondary">Attempts used</p>
+            <p className="mt-2 text-2xl font-bold text-primary">{test?.attempts_used ?? 0}</p>
+          </div>
+          <div className="rounded-2xl border border-theme bg-surface-lighter/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-secondary">Allowed attempts</p>
+            <p className="mt-2 text-2xl font-bold text-primary">{test?.max_attempts ?? 'Unlimited'}</p>
+          </div>
+          <div className="rounded-2xl border border-theme bg-surface-lighter/40 p-4">
+            <p className="text-xs uppercase tracking-[0.14em] text-secondary">Attempts left</p>
+            <p className="mt-2 text-2xl font-bold text-amber-600">0</p>
+          </div>
+        </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <button type="button" onClick={() => navigate(-1)} className="btn-secondary text-sm">Go Back</button>
+          <button type="button" onClick={() => navigate('/student')} className="btn-primary text-sm">Student Dashboard</button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-surface flex flex-col select-none">
       {/* ── Warning overlay ───────────────────────────────────── */}
@@ -269,8 +366,8 @@ export default function TestInterface() {
           >
             <div className="card p-8 max-w-sm text-center border-red-500/40">
               <p className="text-4xl mb-3 inline-flex text-red-500"><WarningAmberRoundedIcon sx={{ fontSize: 34 }} /></p>
-              <h3 className="font-display font-bold text-red-400 text-xl">Tab Switch Detected!</h3>
-              <p className="text-secondary mt-2 text-sm">Warnings: {tabWarnings}/3. After 3, test auto-submits.</p>
+              <h3 className="font-display font-bold text-red-400 text-xl">Violation Detected!</h3>
+              <p className="text-secondary mt-2 text-sm">Violations: {tabWarnings}/{maxViolations}. After {maxViolations}, test auto-submits.</p>
               <button onClick={() => setShowWarn(false)} className="btn-primary mt-4 w-full">Resume Test</button>
             </div>
           </motion.div>
@@ -283,8 +380,13 @@ export default function TestInterface() {
           <p className="font-display font-semibold text-primary">{test?.name}</p>
           <div className="flex items-center gap-3 mt-0.5">
             <span className="text-xs text-secondary">{questions.length} questions</span>
+            {hasAttemptLimit && (
+              <span className="text-xs text-secondary">
+                {Math.max(0, Number(attemptsRemaining) || 0)} attempt{Math.max(0, Number(attemptsRemaining) || 0) === 1 ? '' : 's'} left
+              </span>
+            )}
             {tabWarnings > 0 && (
-              <span className="text-xs text-red-500 inline-flex items-center gap-1"><WarningAmberRoundedIcon sx={{ fontSize: 12 }} /> {tabWarnings} warning{tabWarnings > 1 ? 's' : ''}</span>
+              <span className="text-xs text-red-500 inline-flex items-center gap-1"><WarningAmberRoundedIcon sx={{ fontSize: 12 }} /> {tabWarnings}/{maxViolations} violations</span>
             )}
             {fullscreenLost && <span className="text-xs text-amber-500 animate-pulse inline-flex items-center gap-1"><WarningAmberRoundedIcon sx={{ fontSize: 12 }} /> Fullscreen required</span>}
           </div>
@@ -295,15 +397,24 @@ export default function TestInterface() {
           <button
             onClick={() => {
               if (window.confirm('Submit test now?')) {
-                handleAutoSubmit();
+                void handleAutoSubmit();
               }
             }}
-            className="btn-primary text-sm"
+            disabled={submitMut.isLoading || attemptLimitReached || (hasAttemptLimit && isTestFetching)}
+            className="btn-primary text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Submit Test
+            {attemptLimitReached ? 'Attempt Limit Reached' : submitMut.isLoading ? 'Submitting...' : hasAttemptLimit && isTestFetching ? 'Checking attempts...' : 'Submit Test'}
           </button>
         </div>
       </header>
+
+      {attemptLimitReached && (
+        <div className="px-4 sm:px-6 pt-4">
+          <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+            You have used all allowed attempts for this test. Submission is disabled.
+          </div>
+        </div>
+      )}
 
       {/* ── Main Layout ───────────────────────────────────────── */}
       <div className="flex flex-1 flex-col lg:flex-row overflow-hidden">

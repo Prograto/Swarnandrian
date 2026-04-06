@@ -22,6 +22,25 @@ async def _load_section_doc(db, collection_name: str, section_id: str):
     )
 
 
+def _normalize_selected_answers(answer):
+    if answer is None:
+        return []
+
+    if isinstance(answer, (list, tuple, set)):
+        raw_values = answer
+    else:
+        raw_values = [answer]
+
+    normalized = []
+    for value in raw_values:
+        try:
+            normalized.append(int(value))
+        except (TypeError, ValueError):
+            normalized.append(value)
+
+    return normalized
+
+
 async def _update_leaderboard(
     db,
     student_id: str,
@@ -386,7 +405,7 @@ async def submit_aptitude(
         correct = False
 
         if q["question_type"] in ("mcq", "msq"):
-            correct = set(student_ans or []) == set(q.get("correct_options", []))
+            correct = set(_normalize_selected_answers(student_ans)) == set(q.get("correct_options", []))
         elif q["question_type"] in ("nat", "fill"):
             correct = str(student_ans or "").strip().lower() == str(q.get("correct_answer", "")).strip().lower()
 

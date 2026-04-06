@@ -5,11 +5,42 @@ from typing import Optional
 import pandas as pd
 import io
 
+from app.core.access import student_access_clauses, student_matches_access
 from app.core.security import require_faculty, get_current_user
 from app.db.mongodb import get_db
 from app.models.schemas import AptSectionCreate, AptQuestionCreate, AptTestCreate, SectionType
+from app.utils.bulk_upload import (
+    QUESTION_TEMPLATE_COLUMNS,
+    build_excel_template,
+    cell_bool,
+    cell_float,
+    cell_int,
+    cell_text,
+    split_csv_ints,
+    split_pipe_values,
+)
 
 router = APIRouter()
+
+
+def _normalize_correct_options(values: Optional[list[int]]) -> Optional[list[int]]:
+    if not values:
+        return None
+
+    cleaned = []
+    for value in values:
+        try:
+            cleaned.append(int(value))
+        except (TypeError, ValueError):
+            continue
+
+    if not cleaned:
+        return None
+
+    if all(value > 0 for value in cleaned):
+        return [value - 1 for value in cleaned]
+
+    return cleaned
 
 
 # ─── Sections ────────────────────────────────────────────────────────────────
@@ -35,11 +66,22 @@ async def list_sections(
     if mode: query["mode"] = mode
     if user.get("role") == "student":
         query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            query["$and"] = query.get("$and", []) + access_clauses
     sections = await db.apt_sections.find(query).to_list(200)
-    student_branch = user.get("branch") or user.get("department")
     for s in sections:
         s["id"] = str(s.pop("_id"))
         s["question_count"] = await db.apt_questions.count_documents({"section_id": s["id"], "section_type": "aptitude"})
+        test_query = {"section_id": s["id"], "section_type": "aptitude"}
+        if mode:
+            test_query["mode"] = mode
+        if user.get("role") == "student":
+            test_query["is_active"] = True
+            access_clauses = student_access_clauses(user)
+            if access_clauses:
+                test_query["$and"] = test_query.get("$and", []) + access_clauses
+        s["test_count"] = await db.tests.count_documents(test_query)
 
     if search:
         needle = search.strip().lower()
@@ -47,9 +89,6 @@ async def list_sections(
             s for s in sections
             if needle in f"{s.get('name', '')} {s.get('description', '')}".lower()
         ]
-
-    if user.get("role") == "student" and student_branch:
-        sections = [s for s in sections if not s.get("branch") or s.get("branch") == student_branch]
 
     if not paginate:
         return sections
@@ -70,8 +109,7 @@ async def get_section(section_id: str, db=Depends(get_db), user=Depends(get_curr
     if not s:
         raise HTTPException(404, "Section not found")
     if user.get("role") == "student":
-        student_branch = user.get("branch") or user.get("department")
-        if not s.get("is_active", True) or (s.get("branch") and s.get("branch") != student_branch):
+        if not s.get("is_active", True) or not student_matches_access(user, s):
             raise HTTPException(404, "Section not found")
     s["id"] = str(s.pop("_id"))
     return s
@@ -95,7 +133,9 @@ async def update_section(section_id: str, data: AptSectionCreate, db=Depends(get
 
 @router.post("/questions", status_code=201)
 async def create_question(data: AptQuestionCreate, db=Depends(get_db), user=Depends(require_faculty)):
-    doc = {**data.model_dump(), "section_type": "aptitude", "is_active": data.is_active, "created_by": user["id"], "created_at": datetime.utcnow()}
+    payload = data.model_dump()
+    payload["correct_options"] = _normalize_correct_options(payload.get("correct_options"))
+    doc = {**payload, "section_type": "aptitude", "is_active": data.is_active, "created_by": user["id"], "created_at": datetime.utcnow()}
     result = await db.apt_questions.insert_one(doc)
     return {"id": str(result.inserted_id)}
 
@@ -119,16 +159,17 @@ async def list_questions(
         query["question_type"] = question_type
     if user["role"] == "student":
         query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            query["$and"] = query.get("$and", []) + access_clauses
 
     # Hide answers from students in practice mode
     projection = {}
     if user["role"] == "student":
         projection = {"correct_options": 0, "correct_answer": 0}
-    student_branch = user.get("branch") or user.get("department")
-
     if user["role"] == "student" and section_id:
         section = await db.apt_sections.find_one({"_id": ObjectId(section_id)})
-        if not section or not section.get("is_active", True) or (section.get("branch") and section.get("branch") != student_branch):
+        if not section or not section.get("is_active", True) or not student_matches_access(user, section):
             return {"questions": [], "total": 0, "page": page}
 
     skip = (page - 1) * limit
@@ -144,7 +185,9 @@ async def list_questions(
 
 @router.put("/questions/{qid}")
 async def update_question(qid: str, data: AptQuestionCreate, db=Depends(get_db), _=Depends(require_faculty)):
-    await db.apt_questions.update_one({"_id": ObjectId(qid)}, {"$set": data.model_dump()})
+    payload = data.model_dump()
+    payload["correct_options"] = _normalize_correct_options(payload.get("correct_options"))
+    await db.apt_questions.update_one({"_id": ObjectId(qid)}, {"$set": payload})
     return {"message": "Updated"}
 
 
@@ -167,26 +210,24 @@ async def bulk_upload_questions(
 
     for idx, row in df.iterrows():
         try:
-            options_raw = row.get("options", "")
-            options = [o.strip() for o in str(options_raw).split("|")] if options_raw else None
-            correct_raw = row.get("correct_options", "")
-            correct_opts = [int(x) for x in str(correct_raw).split(",")] if correct_raw else None
+            options = split_pipe_values(row.get("options"))
+            correct_opts = _normalize_correct_options(split_csv_ints(row.get("correct_options")))
 
             doc = {
                 "section_id": section_id,
                 "section_type": "aptitude",
-                "question_type": str(row.get("question_type", "mcq")).lower(),
-                "question_text": str(row.get("question_text", "")),
-                "image_url": row.get("image_url") or None,
+                "question_type": (cell_text(row.get("question_type"), "mcq") or "mcq").lower(),
+                "question_text": cell_text(row.get("question_text"), "") or "",
+                "image_url": cell_text(row.get("image_url")),
                 "options": options,
                 "correct_options": correct_opts,
-                "correct_answer": str(row.get("correct_answer", "")) or None,
-                "explanation": str(row.get("explanation", "")) or None,
-                "marks": int(row.get("marks", 1)),
-                "negative_marks": float(row.get("negative_marks", 0)),
-                "difficulty": str(row.get("difficulty", "Medium")),
-                "branch": row.get("branch") or None,
-                "is_active": bool(row.get("is_active", True)),
+                "correct_answer": cell_text(row.get("correct_answer")),
+                "explanation": cell_text(row.get("explanation")),
+                "marks": cell_int(row.get("marks"), 1),
+                "negative_marks": cell_float(row.get("negative_marks"), 0),
+                "difficulty": (cell_text(row.get("difficulty"), "Medium") or "Medium").title(),
+                "branch": cell_text(row.get("branch")),
+                "is_active": cell_bool(row.get("is_active"), True),
                 "created_by": user["id"],
                 "created_at": datetime.utcnow(),
             }
@@ -196,6 +237,11 @@ async def bulk_upload_questions(
             errors.append({"row": idx + 2, "error": str(e)})
 
     return {"created": created, "errors": errors}
+
+
+@router.get("/questions/bulk-upload/template")
+async def download_question_template(_=Depends(require_faculty)):
+    return build_excel_template(QUESTION_TEMPLATE_COLUMNS, "aptitude_questions_template.xlsx", sheet_name="Questions")
 
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
@@ -231,14 +277,14 @@ async def list_tests(
         query["mode"] = mode
     if user.get("role") == "student":
         query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            query["$and"] = query.get("$and", []) + access_clauses
     tests = await db.tests.find(query).to_list(200)
-    student_branch = user.get("branch") or user.get("department")
     if user.get("role") == "student" and section_id:
         section = await db.apt_sections.find_one({"_id": ObjectId(section_id)})
-        if not section or not section.get("is_active", True) or (section.get("branch") and section.get("branch") != student_branch):
+        if not section or not section.get("is_active", True) or not student_matches_access(user, section):
             tests = []
-    if user.get("role") == "student" and student_branch:
-        tests = [t for t in tests if not t.get("branch") or t.get("branch") == student_branch]
 
     if search:
         needle = search.strip().lower()
@@ -273,8 +319,7 @@ async def get_test(test_id: str, db=Depends(get_db), user=Depends(get_current_us
 
     section = await db.apt_sections.find_one({"_id": ObjectId(test.get("section_id"))}) if test.get("section_id") and ObjectId.is_valid(str(test.get("section_id"))) else None
     if user.get("role") == "student":
-        student_branch = user.get("branch") or user.get("department")
-        if not section or not section.get("is_active", True) or (section.get("branch") and section.get("branch") != student_branch):
+        if not section or not section.get("is_active", True) or not student_matches_access(user, section) or not student_matches_access(user, test):
             raise HTTPException(404, "Test not found")
 
     # Fetch questions (hide answers for students)
@@ -289,6 +334,18 @@ async def get_test(test_id: str, db=Depends(get_db), user=Depends(get_current_us
     questions = await db.apt_questions.find(question_query, projection).to_list(500)
     for q in questions:
         q["id"] = str(q.pop("_id"))
+
+    if user.get("role") == "student":
+        attempts_used = await db.apt_submissions.count_documents({"student_id": user["id"], "test_id": test_id})
+        max_attempts = test.get("max_attempts")
+        attempts_remaining = None
+        try:
+            if max_attempts not in (None, ""):
+                attempts_remaining = max(0, int(max_attempts) - attempts_used)
+        except (TypeError, ValueError):
+            attempts_remaining = None
+        test["attempts_used"] = attempts_used
+        test["attempts_remaining"] = attempts_remaining
 
     test["id"] = str(test.pop("_id"))
     test["questions"] = questions

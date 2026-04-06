@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from 'react-query';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../../components/common/DashboardLayout';
+import BulkUploadTemplateCard from '../../components/common/BulkUploadTemplateCard';
 import { FACULTY_NAV } from './FacultyDashboard';
 import api from '../../utils/api';
+import { QUESTION_TEMPLATE_COLUMNS, QUESTION_TEMPLATE_NOTES, downloadExcelTemplate } from '../../utils/bulkUploadTemplates';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 
 const QTYPES = ['mcq', 'msq', 'nat', 'fill'];
@@ -25,7 +27,8 @@ export default function FacultySectionTestEditorPage() {
     banner_url: '',
     description: '',
     time_limit_minutes: 60,
-    max_attempts: 1,
+    max_attempts: '',
+    max_violations: 3,
     access_code: '',
     branch: '',
     is_active: true,
@@ -57,7 +60,8 @@ export default function FacultySectionTestEditorPage() {
       banner_url: test.banner_url || '',
       description: test.description || '',
       time_limit_minutes: test.time_limit_minutes || 60,
-      max_attempts: test.max_attempts || 1,
+      max_attempts: test.max_attempts ?? (test.mode === 'competitor' ? 1 : ''),
+      max_violations: test.max_violations ?? 3,
       access_code: test.access_code || '',
       branch: test.branch || '',
       is_active: test.is_active !== false,
@@ -84,7 +88,8 @@ export default function FacultySectionTestEditorPage() {
       mode: test.mode,
       question_ids: selectedQIds,
       time_limit_minutes: Number(testForm.time_limit_minutes) || 60,
-      max_attempts: test.mode === 'competitor' ? Number(testForm.max_attempts) || 1 : null,
+      max_attempts: testForm.max_attempts === '' ? null : Number(testForm.max_attempts),
+      max_violations: Number(testForm.max_violations) || 3,
       access_code: testForm.access_code || null,
       branch: testForm.branch || null,
       is_active: testForm.is_active !== false,
@@ -188,6 +193,14 @@ export default function FacultySectionTestEditorPage() {
     }
   };
 
+  const downloadQuestionTemplate = async () => {
+    try {
+      await downloadExcelTemplate(api, `${apiBase}/questions/bulk-upload/template`, `${sectionType}_questions_template.xlsx`);
+    } catch {
+      toast.error('Template download failed');
+    }
+  };
+
   const uploadTestBanner = async (file) => {
     if (!file) return;
     setTestImageUploading(true);
@@ -243,7 +256,7 @@ export default function FacultySectionTestEditorPage() {
       question_type: q.question_type || 'mcq',
       question_text: q.question_text || '',
       options: Array.isArray(q.options) ? q.options.join('|') : '',
-      correct_options: Array.isArray(q.correct_options) ? q.correct_options.join(',') : '',
+      correct_options: Array.isArray(q.correct_options) ? q.correct_options.map((index) => index + 1).join(',') : '',
       correct_answer: q.correct_answer || '',
       explanation: q.explanation || '',
       marks: q.marks ?? 1,
@@ -291,17 +304,19 @@ export default function FacultySectionTestEditorPage() {
                 <label className="text-xs text-secondary font-semibold">Description</label>
                 <textarea className="input mt-1 h-20 resize-none" value={testForm.description} onChange={(e) => setTestForm((p) => ({ ...p, description: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
                   <label className="text-xs text-secondary font-semibold">Time Limit (minutes)</label>
                   <input type="number" className="input mt-1" value={testForm.time_limit_minutes} onChange={(e) => setTestForm((p) => ({ ...p, time_limit_minutes: e.target.value }))} />
                 </div>
-                {test.mode === 'competitor' ? (
-                  <div>
-                    <label className="text-xs text-secondary font-semibold">Max Attempts</label>
-                    <input type="number" className="input mt-1" value={testForm.max_attempts} onChange={(e) => setTestForm((p) => ({ ...p, max_attempts: e.target.value }))} />
-                  </div>
-                ) : null}
+                <div>
+                  <label className="text-xs text-secondary font-semibold">Max Attempts (leave blank for unlimited)</label>
+                  <input type="number" min="1" className="input mt-1" placeholder="Unlimited" value={testForm.max_attempts} onChange={(e) => setTestForm((p) => ({ ...p, max_attempts: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="text-xs text-secondary font-semibold">Max Violations Before Auto Submit</label>
+                  <input type="number" min="1" className="input mt-1" value={testForm.max_violations} onChange={(e) => setTestForm((p) => ({ ...p, max_violations: e.target.value }))} />
+                </div>
                 <div>
                   <label className="text-xs text-secondary font-semibold">Access Code (optional)</label>
                   <input className="input mt-1" value={testForm.access_code} onChange={(e) => setTestForm((p) => ({ ...p, access_code: e.target.value }))} />
@@ -318,6 +333,14 @@ export default function FacultySectionTestEditorPage() {
             </div>
 
             <div className="card p-5 space-y-4">
+              <BulkUploadTemplateCard
+                title="Question Bulk Upload Format"
+                description="Download the template before importing questions for this test."
+                columns={QUESTION_TEMPLATE_COLUMNS}
+                notes={QUESTION_TEMPLATE_NOTES}
+                onDownload={downloadQuestionTemplate}
+              />
+
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold text-primary">Questions In This Test ({selectedQIds.length})</h2>
                 <div className="flex gap-2">
@@ -370,8 +393,8 @@ export default function FacultySectionTestEditorPage() {
                         <input className="input mt-1" value={qForm.options} onChange={(e) => setQForm((p) => ({ ...p, options: e.target.value }))} />
                       </div>
                       <div>
-                        <label className="text-xs text-secondary font-semibold">Correct Option Indices</label>
-                        <input className="input mt-1" value={qForm.correct_options} onChange={(e) => setQForm((p) => ({ ...p, correct_options: e.target.value }))} />
+                        <label className="text-xs text-secondary font-semibold">Correct Option Indices (1-based)</label>
+                        <input className="input mt-1" placeholder="e.g. 1 or 1,3" value={qForm.correct_options} onChange={(e) => setQForm((p) => ({ ...p, correct_options: e.target.value }))} />
                       </div>
                     </>
                   ) : (

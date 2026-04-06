@@ -369,7 +369,7 @@ export default function FacultyBlogEditor() {
               <ArticleRoundedIcon sx={{ fontSize: 26 }} className="text-[#4F7CF3]" /> Blog Editor
             </h1>
             <p className="mt-1 text-sm text-secondary">
-              Write blogs in a visual editor or paste direct HTML, with the editor kept on a dedicated page instead of inside course cards.
+              Write blogs in a visual editor or paste direct HTML. Images and videos inserted from the toolbar are uploaded to S3 automatically.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -542,7 +542,7 @@ export default function FacultyBlogEditor() {
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-sm font-semibold text-primary">Blog Editor</p>
-                      <p className="text-xs text-secondary">Use the visual editor or switch to HTML source for direct code editing. A blog section will be created if needed.</p>
+                      <p className="text-xs text-secondary">Use the visual editor or switch to HTML source for direct code editing. Media inserted from the editor is stored in S3.</p>
                     </div>
                     <BlogModeToggle mode={blogMode} setMode={setBlogMode} />
                   </div>
@@ -588,7 +588,7 @@ export default function FacultyBlogEditor() {
                     <div className="rounded-2xl border border-theme bg-surface-lighter p-4">
                       <p className="text-xs font-semibold text-secondary">Preview</p>
                       <div
-                        className="prose prose-sm mt-3 max-w-none dark:prose-invert"
+                        className="prose prose-sm mt-3 max-w-none dark:prose-invert [&_.ql-align-center]:text-center [&_.ql-align-right]:text-right [&_.ql-align-justify]:text-justify [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-2xl [&_video]:my-4 [&_video]:max-w-full [&_video]:rounded-2xl [&_video]:bg-black"
                         dangerouslySetInnerHTML={{ __html: previewHtml }}
                       />
                     </div>

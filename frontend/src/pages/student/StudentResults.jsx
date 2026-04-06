@@ -30,6 +30,12 @@ export default function StudentResults() {
     maxScore: null,
   });
 
+  const { data: profileStats } = useQuery(
+    'student-results-stats',
+    () => api.get('/profile/me/stats').then((r) => r.data || {}),
+    { staleTime: 60000 }
+  );
+
   // Fetch all submissions
   const { data: codingSubmissions = [], isLoading: codingLoading } = useQuery(
     'student-coding-submissions',
@@ -194,6 +200,7 @@ export default function StudentResults() {
     aptitude: allTests.filter(t => t.section_type === 'aptitude').length,
     technical: allTests.filter(t => t.section_type === 'technical').length,
     competitions: allCompetitions.length,
+    totalScore: profileStats?.stats?.total_score || 0,
   };
 
   const isLoading = codingLoading || testLoading || compLoading;
@@ -330,8 +337,9 @@ export default function StudentResults() {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 mb-6">
             {[
+              { label: 'Total Score', value: stats.totalScore, icon: '🏅' },
               { label: 'Total', value: stats.total, icon: '📊' },
               { label: 'Coding', value: stats.coding, icon: '💻' },
               { label: 'Aptitude', value: stats.aptitude, icon: '🧠' },

@@ -13,6 +13,9 @@ import CodeRoundedIcon from '@mui/icons-material/CodeRounded';
 
 const DIFFS = ['Easy','Medium','Hard'];
 const DSA_TOPICS = ['DSA','Graph Algorithms','Dynamic Programming','SkillUp Coder','Sorting & Searching','Trees','Bit Manipulation'];
+const COURSES = ['BTech', 'MTech'];
+const YEARS = [1, 2, 3, 4];
+const SECTION_CODES = ['A', 'B', 'C', 'D', 'E', 'F'];
 
 export default function FacultyCoding() {
   const { mode } = useParams();
@@ -22,7 +25,7 @@ export default function FacultyCoding() {
   const [showProblemModal, setShowProblemModal] = useState(false);
   const [editingSection, setEditingSection] = useState(null);
   const [editingProblem, setEditingProblem] = useState(null);
-  const [sectionForm, setSectionForm] = useState({ name:'', banner_url:'', description:'', branch:'', is_active:true });
+  const [sectionForm, setSectionForm] = useState({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });
   const [sectionImageUploading, setSectionImageUploading] = useState(false);
   const [problemImageUploading, setProblemImageUploading] = useState(false);
   const [privateCases, setPrivateCases] = useState([{ input:'', expected_output:'' }]);
@@ -63,8 +66,8 @@ export default function FacultyCoding() {
   );
 
   const createSection = useMutation(
-    () => api.post(`/coding/sections?mode=${mode}`, sectionForm),
-    { onSuccess: () => { qc.invalidateQueries(['coding-sections', mode]); setShowSectionModal(false); setSectionForm({name:'',banner_url:'',description:'',branch:'',is_active:true}); toast.success('Section created!'); } }
+    (data) => api.post(`/coding/sections?mode=${mode}`, data),
+    { onSuccess: () => { qc.invalidateQueries(['coding-sections', mode]); setShowSectionModal(false); setSectionForm({name:'',banner_url:'',description:'',branch:'',course:'',year:'',section:'',is_active:true}); toast.success('Section created!'); } }
   );
   const deleteSection = useMutation(
     id => api.delete(`/coding/sections/${id}`),
@@ -137,7 +140,7 @@ export default function FacultyCoding() {
 
   const handleEditSection = (section) => {
     setEditingSection(section);
-    setSectionForm({ name: section.name || '', banner_url: section.banner_url || '', description: section.description || '', branch: section.branch || '', is_active: section.is_active !== false });
+    setSectionForm({ name: section.name || '', banner_url: section.banner_url || '', description: section.description || '', branch: section.branch || '', course: section.course || '', year: section.year ?? '', section: section.section || '', is_active: section.is_active !== false });
     setShowSectionModal(true);
   };
 
@@ -195,6 +198,39 @@ export default function FacultyCoding() {
     });
   };
 
+  const handleSaveSection = () => {
+    const payload = {
+      type: 'coding',
+      name: sectionForm.name,
+      banner_url: sectionForm.banner_url || null,
+      description: sectionForm.description || null,
+      branch: sectionForm.branch || null,
+      course: sectionForm.course || null,
+      year: sectionForm.year === '' ? null : Number(sectionForm.year),
+      section: sectionForm.section || null,
+      is_active: sectionForm.is_active !== false,
+    };
+
+    if (editingSection) {
+      updateSection.mutate({ id: editingSection.id, payload }, {
+        onSuccess: () => {
+          setShowSectionModal(false);
+          setEditingSection(null);
+          setSectionForm({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });
+        },
+      });
+      return;
+    }
+
+    createSection.mutate(payload, {
+      onSuccess: () => {
+        setShowSectionModal(false);
+        setEditingSection(null);
+        setSectionForm({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });
+      },
+    });
+  };
+
   return (
     <DashboardLayout navItems={FACULTY_NAV} role="faculty">
       {/* Section Modal */}
@@ -223,10 +259,13 @@ export default function FacultyCoding() {
               <textarea className="input h-20 resize-none" placeholder="Description (optional)" value={sectionForm.description} onChange={e=>setSectionForm(f=>({...f,description:e.target.value}))}/>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs text-gray-500 mb-1 block font-medium">Branch Access</label><input className="input" placeholder="All branches if blank" value={sectionForm.branch} onChange={e=>setSectionForm(f=>({...f,branch:e.target.value}))}/></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Course Access</label><select className="input" value={sectionForm.course} onChange={e=>setSectionForm(f=>({...f,course:e.target.value}))}><option value="">All courses</option>{COURSES.map((course)=><option key={course} value={course}>{course}</option>)}</select></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Year Access</label><select className="input" value={sectionForm.year} onChange={e=>setSectionForm(f=>({...f,year:e.target.value}))}><option value="">All years</option>{YEARS.map((year)=><option key={year} value={year}>{year}</option>)}</select></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Student Section Access</label><select className="input" value={sectionForm.section} onChange={e=>setSectionForm(f=>({...f,section:e.target.value}))}><option value="">All sections</option>{SECTION_CODES.map((code)=><option key={code} value={code}>{code}</option>)}</select></div>
                 <label className="inline-flex items-center gap-2 text-xs text-gray-500 font-medium mt-6"><input type="checkbox" checked={sectionForm.is_active !== false} onChange={e=>setSectionForm(f=>({...f,is_active:e.target.checked}))}/>Enabled for students</label>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-4"><button onClick={()=>{setShowSectionModal(false);setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', is_active:true });setSectionImageUploading(false);}} className="btn-ghost">Cancel</button><button onClick={()=>{ if (editingSection) { updateSection.mutate({ id: editingSection.id, payload: sectionForm }, { onSuccess: () => { setShowSectionModal(false); setEditingSection(null); setSectionForm({ name:'', banner_url:'', description:'', branch:'', is_active:true }); } }); } else { createSection.mutate(); } }} className="btn-primary">{editingSection ? 'Save Changes' : 'Create'}</button></div>
+            <div className="flex gap-3 justify-end mt-4"><button onClick={()=>{setShowSectionModal(false);setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });setSectionImageUploading(false);}} className="btn-ghost">Cancel</button><button onClick={handleSaveSection} className="btn-primary">{editingSection ? 'Save Changes' : 'Create'}</button></div>
           </motion.div>
         </div>
       )}</AnimatePresence>
@@ -302,7 +341,7 @@ export default function FacultyCoding() {
             <h1 className="section-title inline-flex items-center gap-2">Coding — {mode==='practice'?<><MenuBookRoundedIcon sx={{fontSize:20}}/> Practice</>:<><EmojiEventsRoundedIcon sx={{fontSize:20}}/> Competitor</>}</h1>
             <p className="text-gray-400 text-sm mt-0.5">{mode==='practice'?'Unlimited attempts · Editorial visible after solving':'Scored problems · Counts toward leaderboard'}</p>
           </div>
-          <button onClick={()=>{setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', is_active:true });setShowSectionModal(true);}} className="btn-primary text-sm">+ New Section</button>
+          <button onClick={()=>{setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });setShowSectionModal(true);}} className="btn-primary text-sm">+ New Section</button>
         </div>
 
         <div className="grid lg:grid-cols-4 gap-5">

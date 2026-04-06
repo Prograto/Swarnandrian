@@ -144,6 +144,9 @@ class CodingSectionCreate(BaseModel):
     banner_url: Optional[str] = None
     description: Optional[str] = None
     branch: Optional[str] = None
+    course: Optional[str] = None
+    year: Optional[int] = None
+    section: Optional[str] = None
     is_active: bool = True
 
 class CodingSectionOut(BaseModel):
@@ -240,6 +243,9 @@ class AptSectionCreate(BaseModel):
     banner_url: Optional[str] = None
     description: Optional[str] = None
     branch: Optional[str] = None
+    course: Optional[str] = None
+    year: Optional[int] = None
+    section: Optional[str] = None
     is_active: bool = True
 
 class AptQuestionCreate(BaseModel):
@@ -266,7 +272,11 @@ class AptTestCreate(BaseModel):
     question_ids: List[str]
     time_limit_minutes: int
     max_attempts: Optional[int] = None   # competitor mode
+    max_violations: int = Field(default=3, ge=1)
     access_code: Optional[str] = None
+    course: Optional[str] = None
+    year: Optional[int] = None
+    section: Optional[str] = None
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     branch: Optional[str] = None
@@ -283,6 +293,9 @@ class CompetitionCreate(BaseModel):
     end_time: datetime
     access_code: str
     max_attempts: int = 1
+    course: Optional[str] = None
+    year: Optional[int] = None
+    section: Optional[str] = None
 
 class CompetitionTestCreate(BaseModel):
     competition_id: str
@@ -294,9 +307,13 @@ class CompetitionTestCreate(BaseModel):
     question_ids: Optional[List[str]] = None
     problem_ids: Optional[List[str]] = None
     time_limit_minutes: int
+    max_violations: int = Field(default=3, ge=1)
     access_code: Optional[str] = None
     marks_per_question: float = 1.0
     branch: Optional[str] = None
+    course: Optional[str] = None
+    year: Optional[int] = None
+    section: Optional[str] = None
     is_active: bool = True
 
 
@@ -317,7 +334,7 @@ class Internship(BaseModel):
 class Certificate(BaseModel):
     name: str
     issuer: str
-    year: int
+    year: Optional[int] = None
     link: Optional[str] = None
 
 

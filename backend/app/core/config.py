@@ -1,5 +1,8 @@
-from pydantic_settings import BaseSettings
+from pathlib import Path
 from typing import List
+from urllib.parse import urlparse
+
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -21,9 +24,20 @@ class Settings(BaseSettings):
     @property
     def CODE_RUNNER_BASE_URL(self) -> str:
         url = self.CODE_RUNNER_URL.rstrip("/")
-        if url.startswith(("http://", "https://")):
-            return url
-        return f"http://{url}"
+        if not url.startswith(("http://", "https://")):
+            url = f"http://{url}"
+
+        parsed = urlparse(url)
+        host = (parsed.hostname or "").lower()
+
+        # Docker Compose service names do not resolve from a native Windows run.
+        # When the app is not inside a container, fall back to localhost so the
+        # backend can still talk to a Dockerized code-runner service.
+        if host in {"code-runner", "swarnandrian-code-runner"} and not _running_inside_container():
+            port = parsed.port or 8001
+            return f"{parsed.scheme}://127.0.0.1:{port}"
+
+        return url
 
     ALLOWED_ORIGINS_STR: str = "http://localhost:3000"
 
@@ -70,3 +84,7 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def _running_inside_container() -> bool:
+    return Path("/.dockerenv").exists() or Path("/run/.containerenv").exists()

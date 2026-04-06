@@ -19,6 +19,10 @@ const PIE_COLORS = ['#4F7CF3', '#7C8CFF', '#22c55e', '#f59e0b'];
 export default function FacultyEvaluation() {
   const location = useLocation();
   const [page, setPage] = useState(1);
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [studentCourse, setStudentCourse] = useState('all');
+  const [studentYear, setStudentYear] = useState('all');
+  const [studentSection, setStudentSection] = useState('all');
   const [filters, setFilters] = useState({
     startDate: '',
     endDate: '',
@@ -34,9 +38,10 @@ export default function FacultyEvaluation() {
     maxScore: '',
   });
 
-  const { data } = useQuery('faculty-eval', () => api.get('/faculty/evaluation/overview').then(r => r.data));
+  const { data } = useQuery('faculty-eval', () => api.get('/faculty/evaluation/overview').then((r) => r.data));
+
   const { data: results, isLoading } = useQuery(
-    ['faculty-evaluation-results', page, filters],
+    ['faculty-evaluation-results', page, filters, studentCourse, studentYear, studentSection],
     () => api.get('/faculty/evaluation/results', {
       params: {
         page,
@@ -47,6 +52,9 @@ export default function FacultyEvaluation() {
         student_name: filters.studentName || undefined,
         reg_no: filters.regNo || undefined,
         branch: filters.branch,
+        student_course: studentCourse === 'all' ? undefined : studentCourse,
+        student_year: studentYear === 'all' ? undefined : studentYear,
+        student_section: studentSection === 'all' ? undefined : studentSection,
         exam_type: filters.examType,
         section: filters.section,
         test_id: filters.testId || undefined,
@@ -54,8 +62,14 @@ export default function FacultyEvaluation() {
         min_score: filters.minScore === '' ? undefined : Number(filters.minScore),
         max_score: filters.maxScore === '' ? undefined : Number(filters.maxScore),
       },
-    }).then(r => r.data),
+    }).then((r) => r.data),
     { keepPreviousData: true }
+  );
+
+  const { data: selectedStudentPerformance, isFetching: studentPerformanceLoading } = useQuery(
+    ['faculty-student-performance', selectedStudentId],
+    () => api.get(`/students/${selectedStudentId}/performance`).then((r) => r.data || {}),
+    { enabled: !!selectedStudentId }
   );
 
   useEffect(() => {
@@ -74,10 +88,10 @@ export default function FacultyEvaluation() {
   }, [location.search]);
 
   const statusData = [
-    { name: 'Accepted',     count: data?.recent_submissions?.filter(s => s.status === 'accepted').length || 0 },
-    { name: 'Wrong Answer', count: data?.recent_submissions?.filter(s => s.status === 'wrong_answer').length || 0 },
-    { name: 'TLE',          count: data?.recent_submissions?.filter(s => s.status === 'tle').length || 0 },
-    { name: 'CE',           count: data?.recent_submissions?.filter(s => s.status === 'compilation_error').length || 0 },
+    { name: 'Accepted', count: data?.recent_submissions?.filter((s) => s.status === 'accepted').length || 0 },
+    { name: 'Wrong Answer', count: data?.recent_submissions?.filter((s) => s.status === 'wrong_answer').length || 0 },
+    { name: 'TLE', count: data?.recent_submissions?.filter((s) => s.status === 'tle').length || 0 },
+    { name: 'CE', count: data?.recent_submissions?.filter((s) => s.status === 'compilation_error').length || 0 },
   ];
 
   const overviewPie = [
@@ -90,6 +104,9 @@ export default function FacultyEvaluation() {
   const branches = useMemo(() => results?.branches || [], [results]);
   const sections = useMemo(() => results?.sections || [], [results]);
   const tests = useMemo(() => results?.tests || [], [results]);
+  const studentCourses = useMemo(() => results?.courses || [], [results]);
+  const studentYears = useMemo(() => results?.student_years || [], [results]);
+  const studentSections = useMemo(() => results?.student_sections || [], [results]);
 
   const exportResults = async (format) => {
     const res = await api.get('/faculty/evaluation/results/export', {
@@ -100,6 +117,9 @@ export default function FacultyEvaluation() {
         student_name: filters.studentName || undefined,
         reg_no: filters.regNo || undefined,
         branch: filters.branch,
+        student_course: studentCourse === 'all' ? undefined : studentCourse,
+        student_year: studentYear === 'all' ? undefined : studentYear,
+        student_section: studentSection === 'all' ? undefined : studentSection,
         exam_type: filters.examType,
         section: filters.section,
         test_id: filters.testId || undefined,
@@ -118,6 +138,8 @@ export default function FacultyEvaluation() {
     URL.revokeObjectURL(url);
   };
 
+  const clearStudentSelection = () => setSelectedStudentId('');
+
   return (
     <DashboardLayout navItems={FACULTY_NAV} role="faculty">
       <div className="space-y-6">
@@ -131,11 +153,11 @@ export default function FacultyEvaluation() {
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label:'Students',    value: data?.total_students,   icon:<SchoolRoundedIcon sx={{ fontSize: 24 }} /> },
-            { label:'Tests',       value: data?.total_tests,       icon:<QuizRoundedIcon sx={{ fontSize: 24 }} /> },
-            { label:'Problems',    value: data?.total_problems,    icon:<CodeRoundedIcon sx={{ fontSize: 24 }} /> },
-            { label:'Competitions',value: data?.total_competitions,icon:<EmojiEventsRoundedIcon sx={{ fontSize: 24 }} /> },
-          ].map(s => (
+            { label: 'Students', value: data?.total_students, icon: <SchoolRoundedIcon sx={{ fontSize: 24 }} /> },
+            { label: 'Tests', value: data?.total_tests, icon: <QuizRoundedIcon sx={{ fontSize: 24 }} /> },
+            { label: 'Problems', value: data?.total_problems, icon: <CodeRoundedIcon sx={{ fontSize: 24 }} /> },
+            { label: 'Competitions', value: data?.total_competitions, icon: <EmojiEventsRoundedIcon sx={{ fontSize: 24 }} /> },
+          ].map((s) => (
             <div key={s.label} className="card p-5 text-center">
               <div className="text-2xl mb-2 inline-flex">{s.icon}</div>
               <p className="text-2xl font-display font-bold text-primary">{s.value ?? '—'}</p>
@@ -153,7 +175,7 @@ export default function FacultyEvaluation() {
                 <XAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} />
                 <Tooltip contentStyle={TOOLTIP_STYLE} />
-                <Bar dataKey="count" fill="#6366f1" radius={[4,4,0,0]} />
+                <Bar dataKey="count" fill="#6366f1" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -181,13 +203,25 @@ export default function FacultyEvaluation() {
               <option value="all">All branches</option>
               {branches.map((b) => <option key={b}>{b}</option>)}
             </select>
+            <select className="input" value={studentCourse} onChange={(e) => { setStudentCourse(e.target.value); setPage(1); }}>
+              <option value="all">All courses</option>
+              {studentCourses.map((course) => <option key={course} value={course}>{course}</option>)}
+            </select>
+            <select className="input" value={studentYear} onChange={(e) => { setStudentYear(e.target.value); setPage(1); }}>
+              <option value="all">All years</option>
+              {studentYears.map((year) => <option key={year} value={year}>{year}</option>)}
+            </select>
+            <select className="input" value={studentSection} onChange={(e) => { setStudentSection(e.target.value); setPage(1); }}>
+              <option value="all">All student sections</option>
+              {studentSections.map((section) => <option key={section} value={section}>{section}</option>)}
+            </select>
             <select className="input" value={filters.examType} onChange={(e) => { setFilters((p) => ({ ...p, examType: e.target.value })); setPage(1); }}>
               <option value="all">All exam types</option>
               <option value="practice">Practice</option>
               <option value="competitor">Competition</option>
             </select>
             <select className="input" value={filters.section} onChange={(e) => { setFilters((p) => ({ ...p, section: e.target.value })); setPage(1); }}>
-              <option value="all">All sections</option>
+              <option value="all">All test sections</option>
               {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <input className="input" type="number" placeholder="Min score" value={filters.minScore} onChange={(e) => { setFilters((p) => ({ ...p, minScore: e.target.value })); setPage(1); }} />
@@ -200,12 +234,69 @@ export default function FacultyEvaluation() {
           {filters.testId && <p className="text-xs text-secondary mt-3">Showing exact results for selected test ID: {filters.testId}</p>}
         </div>
 
+        <div className="card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-secondary">Individual student performance</p>
+              <p className="text-sm text-secondary mt-1">Click a student row to inspect their profile and totals.</p>
+            </div>
+            {selectedStudentId && (
+              <button className="btn btn-ghost btn-sm" onClick={clearStudentSelection}>Clear selection</button>
+            )}
+          </div>
+          {!selectedStudentId ? (
+            <div className="rounded-2xl border border-dashed border-theme p-4 text-sm text-secondary">
+              Select a student from the results table to load the performance snapshot.
+            </div>
+          ) : studentPerformanceLoading ? (
+            <div className="rounded-2xl border border-dashed border-theme p-4 text-sm text-secondary">Loading student performance...</div>
+          ) : selectedStudentPerformance?.student ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                {[
+                  { label: 'Total Score', value: selectedStudentPerformance.total_score ?? 0 },
+                  { label: 'Code Submissions', value: selectedStudentPerformance.code_submissions ?? 0 },
+                  { label: 'Accepted', value: selectedStudentPerformance.accepted_solutions ?? 0 },
+                  { label: 'Aptitude Tests', value: selectedStudentPerformance.aptitude_tests_attempted ?? 0 },
+                  { label: 'Competitions', value: selectedStudentPerformance.competition_submissions ?? 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-theme bg-surface-card p-4">
+                    <p className="text-xs uppercase tracking-[0.16em] text-secondary">{item.label}</p>
+                    <p className="mt-2 text-2xl font-bold text-primary">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-3 lg:grid-cols-[1.5fr_1fr]">
+                <div className="rounded-2xl border border-theme bg-surface-card p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-secondary">Student profile</p>
+                  <div className="mt-3 grid gap-2 text-sm text-primary sm:grid-cols-2">
+                    <div><span className="text-secondary">Name:</span> {selectedStudentPerformance.student.name || '—'}</div>
+                    <div><span className="text-secondary">Register No:</span> {selectedStudentPerformance.student.student_id || '—'}</div>
+                    <div><span className="text-secondary">Department:</span> {selectedStudentPerformance.student.department || '—'}</div>
+                    <div><span className="text-secondary">Course:</span> {selectedStudentPerformance.student.course || '—'}</div>
+                    <div><span className="text-secondary">Year:</span> {selectedStudentPerformance.student.year || '—'}</div>
+                    <div><span className="text-secondary">Section:</span> {selectedStudentPerformance.student.section || '—'}</div>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-theme bg-surface-card p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-secondary">Performance highlights</p>
+                  <div className="mt-3 space-y-3 text-sm">
+                    <div className="flex items-center justify-between gap-3"><span className="text-secondary">Best score</span><span className="font-semibold text-primary">{selectedStudentPerformance.best_score ?? 0}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-secondary">Accepted submissions</span><span className="font-semibold text-primary">{selectedStudentPerformance.accepted_solutions ?? 0}</span></div>
+                    <div className="flex items-center justify-between gap-3"><span className="text-secondary">Competition attempts</span><span className="font-semibold text-primary">{selectedStudentPerformance.competition_submissions ?? 0}</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-surface-lighter/70 border-b border-theme">
                 <tr>
-                  {['Student','Branch','Exam Type','Section','Test','Marks','Accuracy','Time Taken','Status','Submitted'].map((h) => <th key={h} className="tbl-th">{h}</th>)}
+                  {['Student', 'Branch', 'Exam Type', 'Section', 'Test', 'Marks', 'Accuracy', 'Time Taken', 'Status', 'Submitted'].map((h) => <th key={h} className="tbl-th">{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -214,7 +305,11 @@ export default function FacultyEvaluation() {
                 ) : !(results?.items || []).length ? (
                   <tr><td colSpan={10} className="tbl-td text-secondary">No matching results.</td></tr>
                 ) : (results.items || []).map((row) => (
-                  <tr key={row.id} className="tbl-row">
+                  <tr
+                    key={row.id}
+                    className={`tbl-row cursor-pointer ${selectedStudentId === (row.student_user_id || row.student_id) ? 'bg-blue-50/60' : ''}`}
+                    onClick={() => setSelectedStudentId(row.student_user_id || row.student_id)}
+                  >
                     <td className="tbl-td">
                       <div className="flex flex-col min-w-0">
                         <span className="font-semibold text-primary truncate">{row.student_name}</span>
@@ -237,9 +332,9 @@ export default function FacultyEvaluation() {
             </table>
           </div>
           <div className="px-4 py-3 border-t border-theme flex items-center justify-between">
-            <button className="btn btn-ghost btn-sm" disabled={page===1} onClick={() => setPage((p) => Math.max(1, p-1))}>Prev</button>
+            <button className="btn btn-ghost btn-sm" disabled={page === 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</button>
             <span className="text-xs text-secondary">Page {page} • {results?.total || 0} records</span>
-            <button className="btn btn-ghost btn-sm" disabled={(results?.items?.length || 0) < 20} onClick={() => setPage((p) => p+1)}>Next</button>
+            <button className="btn btn-ghost btn-sm" disabled={(results?.items?.length || 0) < 20} onClick={() => setPage((p) => p + 1)}>Next</button>
           </div>
         </div>
       </div>

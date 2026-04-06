@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -167,6 +167,11 @@ export default function StudentDashboard() {
     ]);
     return [...(apt.data || []), ...(tech.data || [])];
   });
+  const { data:dashboardTestHistory = [] } = useQuery(
+    'dashboard-test-history',
+    () => api.get('/submissions/aptitude/history?limit=500').then((r) => r.data?.submissions || []),
+    { staleTime: 60000 }
+  );
 
   const unwrapList = (payload) => (Array.isArray(payload) ? payload : (payload?.items || []));
 
@@ -201,6 +206,22 @@ export default function StudentDashboard() {
   const competitorConcepts = concepts.filter((c) => c.mode === 'competitor').slice(0, 6);
   const practiceTests = tests.filter((t) => (t.mode || 'practice') === 'practice').slice(0, 6);
   const competitorTests = tests.filter((t) => t.mode === 'competitor').slice(0, 6);
+  const testAttemptMap = useMemo(() => {
+    const grouped = new Map();
+    dashboardTestHistory.forEach((submission) => {
+      if (!submission.test_id) return;
+      const current = grouped.get(submission.test_id) || { attempts: 0 };
+      current.attempts += 1;
+      grouped.set(submission.test_id, current);
+    });
+    return grouped;
+  }, [dashboardTestHistory]);
+
+  const getAttemptCap = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
 
   const statCards = [
     { icon:<RiBarChartLine/>, label:'Submissions',  value:stats?.total_submissions },
@@ -315,15 +336,35 @@ export default function StudentDashboard() {
               </div>
               <div className="space-y-2.5">
                 {practiceTests.length === 0 && <p className="text-sm text-gray-400 px-2 py-2">No practice tests uploaded.</p>}
-                {practiceTests.map((t) => (
-                  <Link key={t.id} to={`/test/${t.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 hover:bg-gray-50 transition-colors">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
-                      <p className="text-xs text-gray-500 capitalize">{t.section_type || 'test'}</p>
+                {practiceTests.map((t) => {
+                  const attempt = testAttemptMap.get(t.id);
+                  const maxAttempts = getAttemptCap(t.max_attempts);
+                  const attemptsRemaining = maxAttempts === null ? null : Math.max(0, maxAttempts - (attempt?.attempts || 0));
+                  const writtenCount = attempt?.attempts || 0;
+                  const isLocked = attemptsRemaining === 0;
+
+                  return isLocked ? (
+                    <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 bg-gray-50/80 opacity-75">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{t.section_type || 'test'}</p>
+                        <p className="text-xs text-red-600 mt-1">Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · Attempts exhausted</p>
+                      </div>
+                      <span className="text-xs text-red-500 font-medium shrink-0">Locked</span>
                     </div>
-                    <span className="text-xs text-gray-500 inline-flex items-center gap-1 shrink-0"><TimerOutlinedIcon sx={{ fontSize: 14 }} /> {t.time_limit_minutes || 0}m</span>
-                  </Link>
-                ))}
+                  ) : (
+                    <Link key={t.id} to={`/test/${t.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{t.section_type || 'test'}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · {maxAttempts === null ? 'Unlimited attempts' : `${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} left`}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-500 inline-flex items-center gap-1 shrink-0"><TimerOutlinedIcon sx={{ fontSize: 14 }} /> {t.time_limit_minutes || 0}m</span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
 
@@ -334,15 +375,35 @@ export default function StudentDashboard() {
               </div>
               <div className="space-y-2.5">
                 {competitorTests.length === 0 && <p className="text-sm text-gray-400 px-2 py-2">No competitor tests uploaded.</p>}
-                {competitorTests.map((t) => (
-                  <Link key={t.id} to={`/test/${t.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 hover:bg-gray-50 transition-colors">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
-                      <p className="text-xs text-gray-500 capitalize">{t.section_type || 'test'}</p>
+                {competitorTests.map((t) => {
+                  const attempt = testAttemptMap.get(t.id);
+                  const maxAttempts = getAttemptCap(t.max_attempts);
+                  const attemptsRemaining = maxAttempts === null ? null : Math.max(0, maxAttempts - (attempt?.attempts || 0));
+                  const writtenCount = attempt?.attempts || 0;
+                  const isLocked = attemptsRemaining === 0;
+
+                  return isLocked ? (
+                    <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 bg-gray-50/80 opacity-75">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{t.section_type || 'test'}</p>
+                        <p className="text-xs text-red-600 mt-1">Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · Attempts exhausted</p>
+                      </div>
+                      <span className="text-xs text-red-500 font-medium shrink-0">Locked</span>
                     </div>
-                    <span className="text-xs text-gray-500 inline-flex items-center gap-1 shrink-0"><TimerOutlinedIcon sx={{ fontSize: 14 }} /> {t.time_limit_minutes || 0}m</span>
-                  </Link>
-                ))}
+                  ) : (
+                    <Link key={t.id} to={`/test/${t.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{t.name}</p>
+                        <p className="text-xs text-gray-500 capitalize">{t.section_type || 'test'}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · {maxAttempts === null ? 'Unlimited attempts' : `${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} left`}
+                        </p>
+                      </div>
+                      <span className="text-xs text-gray-500 inline-flex items-center gap-1 shrink-0"><TimerOutlinedIcon sx={{ fontSize: 14 }} /> {t.time_limit_minutes || 0}m</span>
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           </div>

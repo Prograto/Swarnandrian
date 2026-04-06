@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../../components/common/DashboardLayout';
+import BulkUploadTemplateCard from '../../components/common/BulkUploadTemplateCard';
 import { FACULTY_NAV } from './FacultyDashboard';
 import api from '../../utils/api';
+import { QUESTION_TEMPLATE_COLUMNS, QUESTION_TEMPLATE_NOTES, downloadExcelTemplate } from '../../utils/bulkUploadTemplates';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import FolderOpenRoundedIcon from '@mui/icons-material/FolderOpenRounded';
@@ -16,6 +18,21 @@ import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
 const TOPICS = ['Operating Systems','DBMS','Computer Networks','OOP','System Design','Data Structures','Algorithms','Software Engineering'];
 const QTYPES = ['mcq','msq','nat','fill'];
 const DIFFS  = ['Easy','Medium','Hard'];
+const COURSES = ['BTech', 'MTech'];
+const YEARS = [1, 2, 3, 4];
+const SECTION_CODES = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+const createTestFormDefaults = (currentMode) => ({
+  name: '',
+  banner_url: '',
+  description: '',
+  time_limit_minutes: 60,
+  max_attempts: currentMode === 'competitor' ? 1 : '',
+  max_violations: 3,
+  access_code: '',
+  branch: '',
+  is_active: true,
+});
 
 export default function FacultyTechnical() {
   const { mode } = useParams();
@@ -29,10 +46,10 @@ export default function FacultyTechnical() {
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [editingTest, setEditingTest] = useState(null);
   const [bulkMode, setBulkMode] = useState(false);
-  const [sectionForm, setSectionForm] = useState({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+  const [sectionForm, setSectionForm] = useState({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
   const [sectionImageUploading, setSectionImageUploading] = useState(false);
   const [qForm, setQForm] = useState({ question_type:'mcq', question_text:'', options:'', correct_options:'', correct_answer:'', explanation:'', marks:1, negative_marks:0, difficulty:'Medium', image_url:'', branch:'', is_active:true });
-  const [testForm, setTestForm] = useState({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });
+  const [testForm, setTestForm] = useState(() => createTestFormDefaults(mode));
   const [testImageUploading, setTestImageUploading] = useState(false);
   const [selectedQIds, setSelectedQIds] = useState([]);
 
@@ -73,6 +90,14 @@ export default function FacultyTechnical() {
     }
   };
 
+  const downloadQuestionTemplate = async () => {
+    try {
+      await downloadExcelTemplate(api, '/technical/questions/bulk-upload/template', 'technical_questions_template.xlsx');
+    } catch {
+      toast.error('Template download failed');
+    }
+  };
+
   const { data: sections, isError: sectionsError, refetch: refetchSections } = useQuery('tech-sections', () => api.get('/technical/sections', { params: { mode } }).then(r => r.data));
   const { data: questions, isError: questionsError, refetch: refetchQuestions } = useQuery(['tech-questions', selectedSection],
     () => api.get('/technical/questions', { params: { section_id: selectedSection } }).then(r => r.data),
@@ -84,12 +109,12 @@ export default function FacultyTechnical() {
   );
 
   const createSection = useMutation(
-    () => api.post(`/technical/sections?mode=${mode}`, { ...sectionForm, type: 'technical' }),
+    (data) => api.post(`/technical/sections?mode=${mode}`, data),
     {
       onSuccess: () => {
         qc.invalidateQueries('tech-sections');
         setShowSectionModal(false);
-        setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+        setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
         toast.success('Section created!');
       },
     }
@@ -152,7 +177,7 @@ export default function FacultyTechnical() {
 
   const handleEditSection = (section) => {
     setEditingSection(section);
-    setSectionForm({ name: section.name || '', banner_url: section.banner_url || '', description: section.description || '', branch: section.branch || '', is_active: section.is_active !== false });
+    setSectionForm({ name: section.name || '', banner_url: section.banner_url || '', description: section.description || '', branch: section.branch || '', course: section.course || '', year: section.year ?? '', section: section.section || '', is_active: section.is_active !== false });
     setShowSectionModal(true);
   };
 
@@ -163,7 +188,7 @@ export default function FacultyTechnical() {
       question_type: question.question_type || 'mcq',
       question_text: question.question_text || '',
       options: Array.isArray(question.options) ? question.options.join(' | ') : '',
-      correct_options: Array.isArray(question.correct_options) ? question.correct_options.join(',') : '',
+      correct_options: Array.isArray(question.correct_options) ? question.correct_options.map((index) => index + 1).join(',') : '',
       correct_answer: question.correct_answer || '',
       explanation: question.explanation || '',
       marks: question.marks ?? 1,
@@ -184,7 +209,8 @@ export default function FacultyTechnical() {
       banner_url: test.banner_url || '',
       description: test.description || '',
       time_limit_minutes: test.time_limit_minutes ?? 60,
-      max_attempts: test.max_attempts ?? 1,
+      max_attempts: test.max_attempts ?? (mode === 'competitor' ? 1 : ''),
+      max_violations: test.max_violations ?? 3,
       access_code: test.access_code || '',
       branch: test.branch || '',
       is_active: test.is_active !== false,
@@ -199,6 +225,9 @@ export default function FacultyTechnical() {
       banner_url: sectionForm.banner_url || null,
       description: sectionForm.description || null,
       branch: sectionForm.branch || null,
+      course: sectionForm.course || null,
+      year: sectionForm.year === '' ? null : Number(sectionForm.year),
+      section: sectionForm.section || null,
       is_active: sectionForm.is_active !== false,
     };
 
@@ -207,17 +236,17 @@ export default function FacultyTechnical() {
         onSuccess: () => {
           setShowSectionModal(false);
           setEditingSection(null);
-          setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+          setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
         },
       });
       return;
     }
 
-    createSection.mutate(undefined, {
+    createSection.mutate(payload, {
       onSuccess: () => {
         setShowSectionModal(false);
         setEditingSection(null);
-        setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+        setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
       },
     });
   };
@@ -274,7 +303,8 @@ export default function FacultyTechnical() {
       mode,
       question_ids: selectedQIds,
       time_limit_minutes: +testForm.time_limit_minutes,
-      max_attempts: mode === 'competitor' ? +testForm.max_attempts : null,
+      max_attempts: testForm.max_attempts === '' ? null : Number(testForm.max_attempts),
+      max_violations: Number(testForm.max_violations) || 3,
       access_code: testForm.access_code || null,
       branch: testForm.branch || null,
       is_active: testForm.is_active !== false,
@@ -286,7 +316,7 @@ export default function FacultyTechnical() {
           setShowTestModal(false);
           setEditingTest(null);
           setSelectedQIds([]);
-          setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });
+          setTestForm(createTestFormDefaults(mode));
         },
       });
       return;
@@ -297,7 +327,7 @@ export default function FacultyTechnical() {
         setShowTestModal(false);
         setEditingTest(null);
         setSelectedQIds([]);
-        setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });
+        setTestForm(createTestFormDefaults(mode));
       },
     });
   };
@@ -325,11 +355,14 @@ export default function FacultyTechnical() {
                 <textarea className="input h-20 resize-none" placeholder="Section description (optional)" value={sectionForm.description} onChange={e=>setSectionForm(f=>({...f,description:e.target.value}))} />
                 <div className="grid grid-cols-2 gap-3">
                   <div><label className="text-xs text-gray-500 mb-1 block font-medium">Branch Access</label><input className="input" placeholder="All branches if blank" value={sectionForm.branch} onChange={e=>setSectionForm(f=>({...f,branch:e.target.value}))} /></div>
+                  <div><label className="text-xs text-gray-500 mb-1 block font-medium">Course Access</label><select className="input" value={sectionForm.course} onChange={e=>setSectionForm(f=>({...f,course:e.target.value}))}><option value="">All courses</option>{COURSES.map((course)=><option key={course} value={course}>{course}</option>)}</select></div>
+                  <div><label className="text-xs text-gray-500 mb-1 block font-medium">Year Access</label><select className="input" value={sectionForm.year} onChange={e=>setSectionForm(f=>({...f,year:e.target.value}))}><option value="">All years</option>{YEARS.map((year)=><option key={year} value={year}>{year}</option>)}</select></div>
+                  <div><label className="text-xs text-gray-500 mb-1 block font-medium">Student Section Access</label><select className="input" value={sectionForm.section} onChange={e=>setSectionForm(f=>({...f,section:e.target.value}))}><option value="">All sections</option>{SECTION_CODES.map((code)=><option key={code} value={code}>{code}</option>)}</select></div>
                   <label className="inline-flex items-center gap-2 text-xs text-gray-500 font-medium mt-6"><input type="checkbox" checked={sectionForm.is_active !== false} onChange={e=>setSectionForm(f=>({...f,is_active:e.target.checked}))} />Enabled for students</label>
                 </div>
               </div>
               <div className="flex gap-3 justify-end">
-                <button onClick={()=>{setShowSectionModal(false);setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });setSectionImageUploading(false);}} className="btn-ghost">Cancel</button>
+                <button onClick={()=>{setShowSectionModal(false);setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });setSectionImageUploading(false);}} className="btn-ghost">Cancel</button>
                 <button onClick={handleSaveSection} className="btn-primary">{editingSection ? 'Save Changes' : 'Create'}</button>
               </div>
             </motion.div>
@@ -352,6 +385,13 @@ export default function FacultyTechnical() {
 
               {bulkMode ? (
                 <div className="space-y-4">
+                  <BulkUploadTemplateCard
+                    title="Question Bulk Upload Format"
+                    description="Upload one question per row using the downloadable Excel template below."
+                    columns={QUESTION_TEMPLATE_COLUMNS}
+                    notes={QUESTION_TEMPLATE_NOTES}
+                    onDownload={downloadQuestionTemplate}
+                  />
                   <div className="border-2 border-dashed border-purple-200 rounded-2xl p-8 text-center">
                     <p className="text-3xl mb-2 inline-flex"><FolderOpenRoundedIcon sx={{fontSize:30}}/></p>
                     <p className="text-sm text-gray-500 mb-3">Upload Excel file with questions</p>
@@ -359,10 +399,6 @@ export default function FacultyTechnical() {
                       Choose File
                       <input type="file" accept=".xlsx" className="hidden" onChange={(e)=>{ handleBulkUpload(e); setShowQModal(false); }} />
                     </label>
-                  </div>
-                  <div className="bg-blue-50 rounded-xl p-4 text-xs text-blue-700 space-y-1">
-                    <p className="font-semibold">Excel columns required:</p>
-                    <p>question_type | question_text | options (pipe-separated) | correct_options (0-indexed, comma-separated) | correct_answer | explanation | marks | negative_marks | difficulty | image_url</p>
                   </div>
                 </div>
               ) : (
@@ -396,8 +432,8 @@ export default function FacultyTechnical() {
                         <input className="input" placeholder="Option A|Option B|Option C|Option D" value={qForm.options} onChange={e=>setQForm(f=>({...f,options:e.target.value}))} />
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block font-medium">Correct option indices (0-based, comma-separated)</label>
-                        <input className="input" placeholder="e.g. 0 or 0,2 for MSQ" value={qForm.correct_options} onChange={e=>setQForm(f=>({...f,correct_options:e.target.value}))} />
+                        <label className="text-xs text-gray-500 mb-1 block font-medium">Correct option indices (1-based, comma-separated)</label>
+                        <input className="input" placeholder="e.g. 1 or 1,3 for MSQ" value={qForm.correct_options} onChange={e=>setQForm(f=>({...f,correct_options:e.target.value}))} />
                       </div>
                     </>
                   )}
@@ -478,17 +514,19 @@ export default function FacultyTechnical() {
                     {qs.length===0 && <p className="text-xs text-gray-400 p-2">Add questions to this section first.</p>}
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="text-xs text-gray-500 mb-1 block font-medium">Time Limit (minutes)</label>
                     <input className="input" type="number" value={testForm.time_limit_minutes} onChange={e=>setTestForm(f=>({...f,time_limit_minutes:e.target.value}))} />
                   </div>
-                  {mode==='competitor' && (
-                    <div>
-                      <label className="text-xs text-gray-500 mb-1 block font-medium">Max Attempts</label>
-                      <input className="input" type="number" value={testForm.max_attempts} onChange={e=>setTestForm(f=>({...f,max_attempts:e.target.value}))} />
-                    </div>
-                  )}
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block font-medium">Max Attempts (leave blank for unlimited)</label>
+                    <input className="input" type="number" min="1" placeholder="Unlimited" value={testForm.max_attempts} onChange={e=>setTestForm(f=>({...f,max_attempts:e.target.value}))} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 mb-1 block font-medium">Max Violations Before Auto Submit</label>
+                    <input className="input" type="number" min="1" value={testForm.max_violations} onChange={e=>setTestForm(f=>({...f,max_violations:e.target.value}))} />
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 mb-1 block font-medium">Access Code (optional)</label>
@@ -503,7 +541,7 @@ export default function FacultyTechnical() {
                 </div>
               </div>
               <div className="flex gap-3 justify-end mt-4">
-                <button onClick={()=>{setShowTestModal(false);setEditingTest(null);setSelectedQIds([]);setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });setTestImageUploading(false);}} className="btn-ghost">Cancel</button>
+                <button onClick={()=>{setShowTestModal(false);setEditingTest(null);setSelectedQIds([]);setTestForm(createTestFormDefaults(mode));setTestImageUploading(false);}} className="btn-ghost">Cancel</button>
                 <button onClick={handleSaveTest} disabled={createTest.isLoading || updateTest.isLoading} className="btn-primary">{editingTest ? 'Save Changes' : 'Create Test'}</button>
               </div>
             </motion.div>
@@ -517,7 +555,7 @@ export default function FacultyTechnical() {
             <h1 className="section-title inline-flex items-center gap-2">Technical — {mode==='practice'?<><MenuBookRoundedIcon sx={{fontSize:20}}/> Practice</>:<><EmojiEventsRoundedIcon sx={{fontSize:20}}/> Competitor</>}</h1>
             <p className="text-gray-400 text-sm mt-0.5">{mode==='practice'?'Unlimited attempts, solutions visible after submission':'Scored tests that appear on the leaderboard'}</p>
           </div>
-          <button onClick={()=>{setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', is_active:true });setShowSectionModal(true);}} className="btn-primary text-sm">+ New Section</button>
+          <button onClick={()=>{setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });setShowSectionModal(true);}} className="btn-primary text-sm">+ New Section</button>
         </div>
 
         <div className="grid lg:grid-cols-4 gap-5">
@@ -561,7 +599,7 @@ export default function FacultyTechnical() {
                   <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
                     <button className="mode-tab px-4 py-2 text-sm active">Tests</button>
                   </div>
-                  <button onClick={()=>{setEditingTest(null);setSelectedQIds([]);setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });setShowTestModal(true);}} className="btn-primary text-sm">+ Create Test</button>
+                  <button onClick={()=>{setEditingTest(null);setSelectedQIds([]);setTestForm(createTestFormDefaults(mode));setShowTestModal(true);}} className="btn-primary text-sm">+ Create Test</button>
                 </div>
 
                 {activeTab==='questions' && (questionsError ? (
@@ -587,7 +625,7 @@ export default function FacultyTechnical() {
                         {q.image_url && <img src={q.image_url} alt="" className="mt-2 h-20 object-contain rounded-lg" loading="lazy"/>}
                         {q.options && (
                           <div className="mt-2 grid grid-cols-2 gap-1">
-                            {q.options.map((o,j)=><span key={j} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-gray-600">{j}. {o}</span>)}
+                            {q.options.map((o,j)=><span key={j} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-gray-600">{j + 1}. {o}</span>)}
                           </div>
                         )}
                       </motion.div>
@@ -636,7 +674,7 @@ export default function FacultyTechnical() {
               <div className="card p-16 text-center">
                 <p className="text-5xl mb-3 inline-flex"><BuildCircleRoundedIcon sx={{fontSize:40}}/></p>
                 <p className="text-gray-500 font-medium">Select a section to manage questions and tests</p>
-                <button onClick={()=>setShowSectionModal(true)} className="btn-primary mt-4 text-sm">Create First Section</button>
+                <button onClick={()=>{setEditingSection(null);setSectionForm({ name:'', banner_url:'', description:'', branch:'', course:'', year:'', section:'', is_active:true });setShowSectionModal(true);}} className="btn-primary mt-4 text-sm">Create First Section</button>
               </div>
             )}
           </div>

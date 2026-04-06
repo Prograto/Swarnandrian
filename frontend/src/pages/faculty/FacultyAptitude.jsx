@@ -15,6 +15,21 @@ import TimerOutlinedIcon from '@mui/icons-material/TimerOutlined';
 const TOPICS = ['Number Series','Quantitative Aptitude','English Ability','Logical Reasoning','Verbal Reasoning','Data Interpretation','Puzzles'];
 const QTYPES = ['mcq','msq','nat','fill'];
 const DIFFS  = ['Easy','Medium','Hard'];
+const COURSES = ['BTech', 'MTech'];
+const YEARS = [1, 2, 3, 4];
+const SECTION_CODES = ['A', 'B', 'C', 'D', 'E', 'F'];
+
+const createTestFormDefaults = (currentMode) => ({
+  name: '',
+  banner_url: '',
+  description: '',
+  time_limit_minutes: 60,
+  max_attempts: currentMode === 'competitor' ? 1 : '',
+  max_violations: 3,
+  access_code: '',
+  branch: '',
+  is_active: true,
+});
 
 export default function FacultyAptitude() {
   const { mode } = useParams();
@@ -28,10 +43,10 @@ export default function FacultyAptitude() {
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [editingTest, setEditingTest] = useState(null);
   const [bulkMode, setBulkMode] = useState(false);
-  const [sectionForm, setSectionForm] = useState({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+  const [sectionForm, setSectionForm] = useState({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
   const [sectionImageUploading, setSectionImageUploading] = useState(false);
   const [qForm, setQForm] = useState({ question_type:'mcq', question_text:'', options:'', correct_options:'', correct_answer:'', explanation:'', marks:1, negative_marks:0, difficulty:'Medium', image_url:'', branch:'', is_active:true });
-  const [testForm, setTestForm] = useState({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });
+  const [testForm, setTestForm] = useState(() => createTestFormDefaults(mode));
   const [testImageUploading, setTestImageUploading] = useState(false);
   const [selectedQIds, setSelectedQIds] = useState([]);
 
@@ -83,12 +98,12 @@ export default function FacultyAptitude() {
   );
 
   const createSection = useMutation(
-    () => api.post(`/aptitude/sections?mode=${mode}`, { ...sectionForm, type: 'aptitude' }),
+    (data) => api.post(`/aptitude/sections?mode=${mode}`, data),
     {
       onSuccess: () => {
         qc.invalidateQueries('apt-sections');
         setShowSectionModal(false);
-        setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+        setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
         toast.success('Section created!');
       },
     }
@@ -151,7 +166,7 @@ export default function FacultyAptitude() {
 
   const handleEditSection = (section) => {
     setEditingSection(section);
-    setSectionForm({ name: section.name || '', banner_url: section.banner_url || '', description: section.description || '', branch: section.branch || '', is_active: section.is_active !== false });
+    setSectionForm({ name: section.name || '', banner_url: section.banner_url || '', description: section.description || '', branch: section.branch || '', course: section.course || '', year: section.year ?? '', section: section.section || '', is_active: section.is_active !== false });
     setShowSectionModal(true);
   };
 
@@ -162,7 +177,7 @@ export default function FacultyAptitude() {
       question_type: question.question_type || 'mcq',
       question_text: question.question_text || '',
       options: Array.isArray(question.options) ? question.options.join(' | ') : '',
-      correct_options: Array.isArray(question.correct_options) ? question.correct_options.join(',') : '',
+      correct_options: Array.isArray(question.correct_options) ? question.correct_options.map((index) => index + 1).join(',') : '',
       correct_answer: question.correct_answer || '',
       explanation: question.explanation || '',
       marks: question.marks ?? 1,
@@ -183,7 +198,8 @@ export default function FacultyAptitude() {
       banner_url: test.banner_url || '',
       description: test.description || '',
       time_limit_minutes: test.time_limit_minutes ?? 60,
-      max_attempts: test.max_attempts ?? 1,
+      max_attempts: test.max_attempts ?? (mode === 'competitor' ? 1 : ''),
+      max_violations: test.max_violations ?? 3,
       access_code: test.access_code || '',
       branch: test.branch || '',
       is_active: test.is_active !== false,
@@ -198,6 +214,9 @@ export default function FacultyAptitude() {
       banner_url: sectionForm.banner_url || null,
       description: sectionForm.description || null,
       branch: sectionForm.branch || null,
+      course: sectionForm.course || null,
+      year: sectionForm.year === '' ? null : Number(sectionForm.year),
+      section: sectionForm.section || null,
       is_active: sectionForm.is_active !== false,
     };
 
@@ -206,17 +225,17 @@ export default function FacultyAptitude() {
         onSuccess: () => {
           setShowSectionModal(false);
           setEditingSection(null);
-          setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+          setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
         },
       });
       return;
     }
 
-    createSection.mutate(undefined, {
+    createSection.mutate(payload, {
       onSuccess: () => {
         setShowSectionModal(false);
         setEditingSection(null);
-        setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });
+        setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });
       },
     });
   };
@@ -273,7 +292,8 @@ export default function FacultyAptitude() {
       mode,
       question_ids: selectedQIds,
       time_limit_minutes: +testForm.time_limit_minutes,
-      max_attempts: mode === 'competitor' ? +testForm.max_attempts : null,
+      max_attempts: testForm.max_attempts === '' ? null : Number(testForm.max_attempts),
+      max_violations: Number(testForm.max_violations) || 3,
       access_code: testForm.access_code || null,
       branch: testForm.branch || null,
       is_active: testForm.is_active !== false,
@@ -285,7 +305,7 @@ export default function FacultyAptitude() {
           setShowTestModal(false);
           setEditingTest(null);
           setSelectedQIds([]);
-          setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });
+          setTestForm(createTestFormDefaults(mode));
         },
       });
       return;
@@ -296,7 +316,7 @@ export default function FacultyAptitude() {
         setShowTestModal(false);
         setEditingTest(null);
         setSelectedQIds([]);
-        setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });
+        setTestForm(createTestFormDefaults(mode));
       },
     });
   };
@@ -323,10 +343,13 @@ export default function FacultyAptitude() {
               <textarea className="input h-20 resize-none" placeholder="Section description (optional)" value={sectionForm.description} onChange={e=>setSectionForm(f=>({...f,description:e.target.value}))} />
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs text-gray-500 mb-1 block font-medium">Branch Access</label><input className="input" placeholder="All branches if blank" value={sectionForm.branch} onChange={e=>setSectionForm(f=>({...f,branch:e.target.value}))} /></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Course Access</label><select className="input" value={sectionForm.course} onChange={e=>setSectionForm(f=>({...f,course:e.target.value}))}><option value="">All courses</option>{COURSES.map((course)=><option key={course} value={course}>{course}</option>)}</select></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Year Access</label><select className="input" value={sectionForm.year} onChange={e=>setSectionForm(f=>({...f,year:e.target.value}))}><option value="">All years</option>{YEARS.map((year)=><option key={year} value={year}>{year}</option>)}</select></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Student Section Access</label><select className="input" value={sectionForm.section} onChange={e=>setSectionForm(f=>({...f,section:e.target.value}))}><option value="">All sections</option>{SECTION_CODES.map((code)=><option key={code} value={code}>{code}</option>)}</select></div>
                 <label className="inline-flex items-center gap-2 text-xs text-gray-500 font-medium mt-6"><input type="checkbox" checked={sectionForm.is_active !== false} onChange={e=>setSectionForm(f=>({...f,is_active:e.target.checked}))} />Enabled for students</label>
               </div>
             </div>
-            <div className="flex gap-3 justify-end"><button onClick={()=>{setShowSectionModal(false);setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch: '', is_active: true });setSectionImageUploading(false);}} className="btn-ghost">Cancel</button><button onClick={handleSaveSection} className="btn-primary">{editingSection ? 'Save Changes' : 'Create'}</button></div>
+            <div className="flex gap-3 justify-end"><button onClick={()=>{setShowSectionModal(false);setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch: '', course: '', year: '', section: '', is_active: true });setSectionImageUploading(false);}} className="btn-ghost">Cancel</button><button onClick={handleSaveSection} className="btn-primary">{editingSection ? 'Save Changes' : 'Create'}</button></div>
           </motion.div>
         </div>
       )}</AnimatePresence>
@@ -350,9 +373,10 @@ export default function FacultyAptitude() {
                 <p className="font-semibold mb-1">Questions are managed in Open Test page</p>
                 <p>Create this test first, then click Open Test to add questions manually or via bulk upload.</p>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div><label className="text-xs text-gray-500 mb-1 block font-medium">Time (minutes)</label><input className="input" type="number" value={testForm.time_limit_minutes} onChange={e=>setTestForm(f=>({...f,time_limit_minutes:e.target.value}))}/></div>
-                {mode==='competitor'&&<div><label className="text-xs text-gray-500 mb-1 block font-medium">Max Attempts</label><input className="input" type="number" value={testForm.max_attempts} onChange={e=>setTestForm(f=>({...f,max_attempts:e.target.value}))}/></div>}
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Max Attempts (leave blank for unlimited)</label><input className="input" type="number" min="1" placeholder="Unlimited" value={testForm.max_attempts} onChange={e=>setTestForm(f=>({...f,max_attempts:e.target.value}))}/></div>
+                <div><label className="text-xs text-gray-500 mb-1 block font-medium">Max Violations Before Auto Submit</label><input className="input" type="number" min="1" value={testForm.max_violations} onChange={e=>setTestForm(f=>({...f,max_violations:e.target.value}))}/></div>
               </div>
               <div><label className="text-xs text-gray-500 mb-1 block font-medium">Access Code (optional)</label><input className="input" placeholder="Leave blank for open" value={testForm.access_code} onChange={e=>setTestForm(f=>({...f,access_code:e.target.value}))}/></div>
               <div className="grid grid-cols-2 gap-3">
@@ -360,7 +384,7 @@ export default function FacultyAptitude() {
                 <label className="inline-flex items-center gap-2 text-xs text-gray-500 font-medium mt-6"><input type="checkbox" checked={testForm.is_active !== false} onChange={e=>setTestForm(f=>({...f,is_active:e.target.checked}))}/>Enabled for students</label>
               </div>
             </div>
-            <div className="flex gap-3 justify-end mt-4"><button onClick={()=>{setShowTestModal(false);setEditingTest(null);setSelectedQIds([]);setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });setTestImageUploading(false);}} className="btn-ghost">Cancel</button><button onClick={handleSaveTest} disabled={createTest.isLoading || updateTest.isLoading} className="btn-primary">{editingTest ? 'Save Changes' : 'Create Test'}</button></div>
+            <div className="flex gap-3 justify-end mt-4"><button onClick={()=>{setShowTestModal(false);setEditingTest(null);setSelectedQIds([]);setTestForm(createTestFormDefaults(mode));setTestImageUploading(false);}} className="btn-ghost">Cancel</button><button onClick={handleSaveTest} disabled={createTest.isLoading || updateTest.isLoading} className="btn-primary">{editingTest ? 'Save Changes' : 'Create Test'}</button></div>
           </motion.div>
         </div>
       )}</AnimatePresence>
@@ -371,7 +395,7 @@ export default function FacultyAptitude() {
             <h1 className="section-title inline-flex items-center gap-2">Aptitude — {mode==='practice'?<><MenuBookRoundedIcon sx={{fontSize:20}}/> Practice</>:<><EmojiEventsRoundedIcon sx={{fontSize:20}}/> Competitor</>}</h1>
             <p className="text-gray-400 text-sm mt-0.5">{mode==='practice'?'Unlimited attempts · Solutions visible after submission':'Scored · Counts toward leaderboard'}</p>
           </div>
-          <button onClick={()=>{setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch:'', is_active:true });setShowSectionModal(true);}} className="btn-primary text-sm">+ New Section</button>
+          <button onClick={()=>{setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch:'', course:'', year:'', section:'', is_active:true });setShowSectionModal(true);}} className="btn-primary text-sm">+ New Section</button>
         </div>
         <div className="grid lg:grid-cols-4 gap-5">
           <div className="space-y-2">
@@ -408,7 +432,7 @@ export default function FacultyAptitude() {
                   <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
                     <button className="mode-tab px-4 py-2 text-sm active">Tests</button>
                   </div>
-                  <button onClick={()=>{setEditingTest(null);setSelectedQIds([]);setTestForm({ name:'', banner_url:'', description:'', time_limit_minutes:60, max_attempts:1, access_code:'', branch:'', is_active:true });setShowTestModal(true);}} className="btn-primary text-sm">+ Create Test</button>
+                  <button onClick={()=>{setEditingTest(null);setSelectedQIds([]);setTestForm(createTestFormDefaults(mode));setShowTestModal(true);}} className="btn-primary text-sm">+ Create Test</button>
                 </div>
                 {activeTab==='questions'&& (questionsError ? (
                   <div className="card p-10 text-center text-red-600">
@@ -427,7 +451,7 @@ export default function FacultyAptitude() {
                     </div>
                     <p className="text-sm text-gray-700 mt-2 line-clamp-3">{q.question_text}</p>
                     {q.image_url&&<img src={q.image_url} alt="" className="mt-2 h-20 object-contain rounded-lg" loading="lazy"/>}
-                    {q.options&&<div className="mt-2 grid grid-cols-2 gap-1">{q.options.map((o,j)=><span key={j} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-gray-600">{j}. {o}</span>)}</div>}
+                    {q.options&&<div className="mt-2 grid grid-cols-2 gap-1">{q.options.map((o,j)=><span key={j} className="text-xs bg-gray-50 border border-gray-100 rounded-lg px-2 py-1 text-gray-600">{j + 1}. {o}</span>)}</div>}
                   </motion.div>)}
                   {qs.length===0&&<div className="card p-12 text-center"><p className="text-4xl mb-2 inline-flex"><QuizRoundedIcon sx={{fontSize:34}}/></p><p className="text-gray-400">No questions yet.</p></div>}
                 </div>)}
@@ -470,7 +494,7 @@ export default function FacultyAptitude() {
                   {!tests?.length&&<div className="card p-12 text-center"><p className="text-4xl mb-2 inline-flex"><QuizRoundedIcon sx={{fontSize:34}}/></p><p className="text-gray-400">No tests yet.</p></div>}
                 </div>)}
               </>
-            ) : <div className="card p-16 text-center"><p className="text-5xl mb-3 inline-flex"><QuizRoundedIcon sx={{fontSize:38}}/></p><p className="text-gray-500">Select a section to get started</p><button onClick={()=>setShowSectionModal(true)} className="btn-primary mt-4 text-sm">Create First Section</button></div>}
+            ) : <div className="card p-16 text-center"><p className="text-5xl mb-3 inline-flex"><QuizRoundedIcon sx={{fontSize:38}}/></p><p className="text-gray-500">Select a section to get started</p><button onClick={()=>{setEditingSection(null);setSectionForm({ name: '', banner_url: '', description: '', branch:'', course:'', year:'', section:'', is_active:true });setShowSectionModal(true);}} className="btn-primary mt-4 text-sm">Create First Section</button></div>}
           </div>
         </div>
       </div>

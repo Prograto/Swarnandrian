@@ -24,6 +24,10 @@ const STATUS_STYLE = {
   ended:   { border:'border-l-gray-300',   badge:'bg-gray-100 text-gray-400', dot:'bg-gray-300' },
 };
 
+const COURSES = ['BTech', 'MTech'];
+const YEARS = [1, 2, 3, 4];
+const SECTION_CODES = ['A', 'B', 'C', 'D', 'E', 'F'];
+
 const ADMIN_NAV = [
   { label:'Dashboard',   href:'/admin',             icon:<DashboardRoundedIcon sx={{ fontSize: 18 }}/> },
   { label:'Users',       href:'/admin/users',       icon:<GroupRoundedIcon sx={{ fontSize: 18 }}/> },
@@ -43,6 +47,7 @@ function CompetitionModal({ open, onClose, onSave, loading, initialData }) {
   const [form, setForm] = useState({
     name:'', description:'', banner_url:'',
     start_time:'', end_time:'', access_code:'', max_attempts:1,
+    course:'', year:'', section:'',
   });
   const [uploading, setUploading] = useState(false);
 
@@ -57,9 +62,12 @@ function CompetitionModal({ open, onClose, onSave, loading, initialData }) {
         end_time: initialData.end_time ? new Date(initialData.end_time).toISOString().slice(0, 16) : '',
         access_code: initialData.access_code || '',
         max_attempts: initialData.max_attempts || 1,
+        course: initialData.course || '',
+        year: initialData.year ?? '',
+        section: initialData.section || '',
       });
     } else {
-      setForm({ name:'', description:'', banner_url:'', start_time:'', end_time:'', access_code:'', max_attempts:1 });
+      setForm({ name:'', description:'', banner_url:'', start_time:'', end_time:'', access_code:'', max_attempts:1, course:'', year:'', section:'' });
     }
   }, [open, initialData]);
 
@@ -134,6 +142,29 @@ function CompetitionModal({ open, onClose, onSave, loading, initialData }) {
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Max Attempts per Student</label>
             <input className="input" type="number" min="1" value={form.max_attempts} onChange={e=>f('max_attempts',e.target.value)}/>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Course Access</label>
+              <select className="input" value={form.course} onChange={e=>f('course',e.target.value)}>
+                <option value="">All courses</option>
+                {COURSES.map((course) => <option key={course} value={course}>{course}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Year Access</label>
+              <select className="input" value={form.year} onChange={e=>f('year',e.target.value)}>
+                <option value="">All years</option>
+                {YEARS.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Student Section Access</label>
+              <select className="input" value={form.section} onChange={e=>f('section',e.target.value)}>
+                <option value="">All sections</option>
+                {SECTION_CODES.map((sectionCode) => <option key={sectionCode} value={sectionCode}>{sectionCode}</option>)}
+              </select>
+            </div>
           </div>
         </div>
         <div className="px-6 pb-6 flex gap-3 justify-end border-t border-gray-100 pt-4">

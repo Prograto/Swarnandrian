@@ -13,6 +13,24 @@ import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 
 const PAGE_SIZE = 8;
 
+function getAttemptCap(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getAttemptsLeft(item, attempt) {
+  const maxAttempts = getAttemptCap(item?.max_attempts);
+  if (maxAttempts === null) {
+    return null;
+  }
+
+  return Math.max(0, maxAttempts - (attempt?.attempts || 0));
+}
+
 function domainConfig(domain) {
   if (domain === 'coding') {
     return {
@@ -182,6 +200,15 @@ export default function StudentSectionTests() {
             const bookmarkId = `${domain}-${config.type}-${row.id}`;
             const active = isBookmarked(bookmarkId);
             const attempt = attemptMap.get(row.id);
+            const attemptsRemaining = getAttemptsLeft(row, attempt);
+            const isLocked = attemptsRemaining === 0;
+            const isTestItem = domain !== 'coding';
+            const writtenCount = attempt?.attempts || 0;
+            const actionLabel = domain === 'coding'
+              ? config.actionLabel
+              : attempt
+                ? 'Retake Test'
+                : config.actionLabel;
             return (
               <motion.div
                 key={row.id}
@@ -207,17 +234,30 @@ export default function StudentSectionTests() {
                 <div className="p-4 space-y-3">
                   <h3 className="font-semibold text-primary line-clamp-1">{row[config.nameField]}</h3>
                   <p className="text-xs text-secondary line-clamp-2">{row[config.descField] || 'No description available.'}</p>
+                  {isTestItem && (
+                    <div className={`rounded-2xl px-3 py-2 text-xs ${attemptsRemaining === null ? 'border border-theme bg-surface text-secondary' : isLocked ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                      Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · {attemptsRemaining === null
+                        ? 'Unlimited attempts'
+                        : `${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} left`}
+                    </div>
+                  )}
                   {attempt ? (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      Attempted {attempt.attempts} time{attempt.attempts > 1 ? 's' : ''} · Best score {attempt.bestScore}
+                      Best score {attempt.bestScore}
                     </div>
                   ) : null}
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-xs text-secondary">{domain === 'coding' ? (row.difficulty || 'Unrated') : `${row.question_ids?.length || 0} Questions`}</span>
-                    <Link to={config.href(row)} className="btn-primary text-xs inline-flex items-center gap-1">
-                      {config.actionLabel}
-                      <OpenInNewRoundedIcon sx={{ fontSize: 14 }} />
-                    </Link>
+                    {isLocked ? (
+                      <div className="btn-primary text-xs inline-flex items-center gap-1 opacity-50 cursor-not-allowed select-none pointer-events-none">
+                        Attempts Exhausted
+                      </div>
+                    ) : (
+                      <Link to={config.href(row)} className="btn-primary text-xs inline-flex items-center gap-1">
+                        {actionLabel}
+                        <OpenInNewRoundedIcon sx={{ fontSize: 14 }} />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </motion.div>

@@ -21,6 +21,7 @@ import SaveRoundedIcon from '@mui/icons-material/SaveRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import toast from 'react-hot-toast';
 import api from '../../utils/api';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const ROLE_CONF = {
   admin:   { gradient:'from-[#4F7CF3] to-[#7C8CFF]', light:'bg-blue-50 text-blue-600',   label:'Admin' },
@@ -79,7 +80,7 @@ export default function DashboardLayout({ navItems, children, role }) {
       toast.success('Profile updated');
       setProfileOpen(false);
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Profile update failed');
+      toast.error(getApiErrorMessage(err, 'Profile update failed'));
     } finally {
       setProfileSaving(false);
     }

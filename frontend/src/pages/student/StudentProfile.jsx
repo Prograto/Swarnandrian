@@ -22,6 +22,7 @@ import InterestsRoundedIcon from '@mui/icons-material/InterestsRounded';
 import PasswordRoundedIcon from '@mui/icons-material/PasswordRounded';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
+import { getApiErrorMessage } from '../../utils/apiError';
 
 const EMPTY_PROJECT = { title: '', description: '', tech_stack: '', link: '' };
 const EMPTY_INTERNSHIP = { company: '', role: '', duration: '', description: '' };
@@ -32,6 +33,26 @@ const SKILLS_LIST = ['Python', 'JavaScript', 'C++', 'Java', 'React', 'Node.js', 
 function normalizeRows(rows, template) {
   if (!Array.isArray(rows) || rows.length === 0) return [template()];
   return rows.map((row) => ({ ...template(), ...row }));
+}
+
+function splitCsvList(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+
+  return [];
+}
+
+function toCsvInput(value) {
+  if (Array.isArray(value)) {
+    return value.join(', ');
+  }
+
+  return typeof value === 'string' ? value : '';
 }
 
 function BadgeTier({ score = 0 }) {
@@ -99,7 +120,10 @@ export default function StudentProfile() {
       profile_photo_url: p.profile_photo_url || '',
       objective: p.objective || '',
       skills: p.skills || [],
-      projects: normalizeRows(p.projects, () => ({ ...EMPTY_PROJECT })),
+      projects: normalizeRows(p.projects, () => ({ ...EMPTY_PROJECT })).map((project) => ({
+        ...project,
+        tech_stack: toCsvInput(project.tech_stack),
+      })),
       internships: normalizeRows(p.internships, () => ({ ...EMPTY_INTERNSHIP })),
       achievements: p.achievements || [],
       education: normalizeRows(p.education, () => ({ ...EMPTY_EDUCATION })),
@@ -115,7 +139,7 @@ export default function StudentProfile() {
       setEditing(false);
       toast.success('Profile updated');
     },
-    onError: (error) => toast.error(error.response?.data?.detail || 'Update failed'),
+    onError: (error) => toast.error(getApiErrorMessage(error, 'Update failed')),
   });
 
   const uploadAsset = async (file, folder) => {
@@ -147,7 +171,7 @@ export default function StudentProfile() {
       updateField('profile_photo_url', result.url);
       toast.success('Profile photo uploaded');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Photo upload failed');
+      toast.error(getApiErrorMessage(error, 'Photo upload failed'));
     } finally {
       setUploading(false);
     }
@@ -165,13 +189,49 @@ export default function StudentProfile() {
       });
       toast.success('Certificate uploaded');
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Certificate upload failed');
+      toast.error(getApiErrorMessage(error, 'Certificate upload failed'));
     } finally {
       setUploading(false);
     }
   };
 
   const handleSave = () => {
+    const normalizedProjects = (form.projects || [])
+      .map((item) => ({
+        title: (item.title || '').trim(),
+        description: (item.description || '').trim(),
+        tech_stack: splitCsvList(item.tech_stack),
+        link: (item.link || '').trim() || null,
+      }))
+      .filter((item) => item.title || item.description || item.tech_stack.length || item.link);
+
+    const normalizedInternships = (form.internships || [])
+      .map((item) => ({
+        company: (item.company || '').trim(),
+        role: (item.role || '').trim(),
+        duration: (item.duration || '').trim(),
+        description: (item.description || '').trim(),
+      }))
+      .filter((item) => item.company || item.role || item.duration || item.description);
+
+    const normalizedEducation = (form.education || [])
+      .map((item) => ({
+        institution: (item.institution || '').trim(),
+        degree: (item.degree || '').trim(),
+        year: (item.year || '').trim(),
+        description: (item.description || '').trim(),
+      }))
+      .filter((item) => item.institution || item.degree || item.year || item.description);
+
+    const normalizedCertificates = (form.certificates || [])
+      .map((item) => ({
+        name: (item.name || '').trim(),
+        issuer: (item.issuer || '').trim(),
+        year: item.year === '' || item.year === null || item.year === undefined ? null : Number(item.year),
+        link: (item.link || '').trim() || null,
+      }))
+      .filter((item) => item.name || item.issuer || item.year !== null || item.link);
+
     saveMutation.mutate({
       name: form.name,
       phone: form.phone,
@@ -179,14 +239,14 @@ export default function StudentProfile() {
       linkedin: form.linkedin,
       portfolio_url: form.portfolio_url,
       profile_photo_url: form.profile_photo_url,
-      skills: form.skills,
-      projects: (form.projects || []).filter((item) => item.title || item.description || item.link),
-      internships: (form.internships || []).filter((item) => item.company || item.role || item.description),
-      achievements: (form.achievements || []).filter(Boolean),
-      education: (form.education || []).filter((item) => item.institution || item.degree || item.year),
-      certificates: (form.certificates || []).filter((item) => item.name || item.issuer || item.link),
+      skills: (form.skills || []).map((skill) => String(skill).trim()).filter(Boolean),
+      projects: normalizedProjects,
+      internships: normalizedInternships,
+      achievements: (form.achievements || []).map((achievement) => String(achievement).trim()).filter(Boolean),
+      education: normalizedEducation,
+      certificates: normalizedCertificates,
       objective: form.objective,
-      interests: (form.interests || []).filter(Boolean),
+      interests: (form.interests || []).map((interest) => String(interest).trim()).filter(Boolean),
       password: form.password?.trim() || undefined,
     });
   };
@@ -348,7 +408,7 @@ export default function StudentProfile() {
                 </div>
                 <p className="mt-2 text-sm leading-relaxed text-secondary">{project.description}</p>
                 <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(project.tech_stack || []).map((tech) => <span key={tech} className="rounded-full bg-surface-lighter px-2.5 py-1 text-xs text-secondary">{tech}</span>)}
+                  {splitCsvList(project.tech_stack).map((tech) => <span key={tech} className="rounded-full bg-surface-lighter px-2.5 py-1 text-xs text-secondary">{tech}</span>)}
                 </div>
               </div>
             )) : <p className="text-sm text-secondary">No projects added yet.</p>}
@@ -377,7 +437,7 @@ export default function StudentProfile() {
                 {(p.certificates || []).length > 0 ? p.certificates.map((certificate, index) => (
                   <div key={`${certificate.name}-${index}`} className="rounded-2xl border border-theme bg-surface p-4">
                     <p className="font-semibold text-primary">{certificate.name}</p>
-                    <p className="text-sm text-secondary">{certificate.issuer} · {certificate.year}</p>
+                    <p className="text-sm text-secondary">{certificate.issuer} · {certificate.year || '—'}</p>
                     {certificate.link && <a href={certificate.link} target="_blank" rel="noreferrer" className="mt-1 inline-block text-xs font-medium text-primary hover:underline">Open file</a>}
                   </div>
                 )) : <p className="text-sm text-secondary">No certificates added yet.</p>}
@@ -512,7 +572,7 @@ export default function StudentProfile() {
                 <Field label="Title" value={project.title || ''} onChange={(e) => updateListItem('projects', index, { ...project, title: e.target.value })} placeholder="Project title" />
                 <Field label="Link" value={project.link || ''} onChange={(e) => updateListItem('projects', index, { ...project, link: e.target.value })} placeholder="https://..." />
                 <TextareaField label="Description" value={project.description || ''} onChange={(e) => updateListItem('projects', index, { ...project, description: e.target.value })} placeholder="What did you build?" rows={3} />
-                <Field label="Tech stack" value={project.tech_stack || ''} onChange={(e) => updateListItem('projects', index, { ...project, tech_stack: e.target.value })} placeholder="React, FastAPI, PostgreSQL" />
+                <Field label="Tech stack" value={toCsvInput(project.tech_stack)} onChange={(e) => updateListItem('projects', index, { ...project, tech_stack: e.target.value })} placeholder="React, FastAPI, PostgreSQL" />
               </div>
             </div>
           ))}

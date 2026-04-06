@@ -22,7 +22,7 @@ const SECTION_GRADIENTS = [
 
 function SectionCard({ section, mode, index }) {
   const gradient = SECTION_GRADIENTS[index % SECTION_GRADIENTS.length];
-  const qCount = section.question_count || 0;
+  const testCount = section.test_count ?? section.question_count ?? 0;
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -47,7 +47,7 @@ function SectionCard({ section, mode, index }) {
         </div>
         <div className="flex items-center gap-3 mt-auto pt-1">
           <div className="flex items-center gap-1.5 text-xs text-secondary">
-            <QuizRoundedIcon sx={{ fontSize: 14 }} /><span>{qCount} Question{qCount !== 1 ? 's' : ''}</span>
+            <QuizRoundedIcon sx={{ fontSize: 14 }} /><span>{testCount} Test{testCount !== 1 ? 's' : ''}</span>
           </div>
           {section.branch && <span className="text-xs text-secondary truncate">· {section.branch}</span>}
         </div>

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import api from '../../utils/api';
@@ -48,6 +49,7 @@ export default function ChatbotWidget() {
   const bottomRef = useRef(null);
   const bodyRef = useRef(null);
   const inputRef = useRef(null);
+  const portalTarget = typeof document !== 'undefined' ? document.body : null;
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -126,14 +128,14 @@ export default function ChatbotWidget() {
     ]);
   };
 
-  return (
+  const widget = (
     <>
       {/* Floating Button */}
       <motion.button
         onClick={() => setOpen((v) => !v)}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.95 }}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-2xl shadow-[0_8px_32px_rgba(79,124,243,0.4)] flex items-center justify-center text-white"
+        className="fixed bottom-6 right-6 z-[9999] w-14 h-14 rounded-2xl shadow-[0_8px_32px_rgba(79,124,243,0.4)] flex items-center justify-center text-white"
         style={{ background: 'linear-gradient(135deg,#4F7CF3,#7C8CFF)' }}
         aria-label="Open chatbot"
       >
@@ -167,7 +169,7 @@ export default function ChatbotWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.94 }}
             transition={{ type: 'spring', stiffness: 340, damping: 28 }}
-            className="fixed bottom-24 right-6 z-50 w-[360px] max-w-[calc(100vw-24px)] flex flex-col rounded-3xl border border-theme bg-surface-card shadow-[0_24px_64px_rgba(15,23,42,0.2)] overflow-hidden"
+            className="fixed bottom-24 right-6 z-[9999] w-[360px] max-w-[calc(100vw-24px)] flex flex-col rounded-3xl border border-theme bg-surface-card shadow-[0_24px_64px_rgba(15,23,42,0.2)] overflow-hidden"
             style={{ height: '520px' }}
           >
             {/* Header */}
@@ -298,4 +300,6 @@ export default function ChatbotWidget() {
       </AnimatePresence>
     </>
   );
+
+  return portalTarget ? createPortal(widget, portalTarget) : widget;
 }

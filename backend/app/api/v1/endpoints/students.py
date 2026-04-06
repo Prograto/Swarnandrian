@@ -12,6 +12,7 @@ async def list_students(
     department: Optional[str] = None,
     year: Optional[int] = None,
     course: Optional[str] = None,
+    section: Optional[str] = None,
     search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
@@ -25,6 +26,8 @@ async def list_students(
         query["year"] = year
     if course:
         query["course"] = course
+    if section:
+        query["section"] = section
     if search:
         query["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},
@@ -50,6 +53,7 @@ async def student_performance(student_id: str, db=Depends(get_db), _=Depends(req
     code_subs = await db.code_submissions.count_documents({"student_id": student_id})
     accepted = await db.code_submissions.count_documents({"student_id": student_id, "status": "accepted"})
     apt_subs = await db.apt_submissions.count_documents({"student_id": student_id})
+    competition_subs = await db.competition_submissions.count_documents({"student_id": student_id})
 
     leaderboard_entry = await db.leaderboard.find_one(
         {"student_id": student_id}, sort=[("score", -1)]
@@ -61,5 +65,7 @@ async def student_performance(student_id: str, db=Depends(get_db), _=Depends(req
         "code_submissions": code_subs,
         "accepted_solutions": accepted,
         "aptitude_tests_attempted": apt_subs,
+        "competition_submissions": competition_subs,
+        "total_score": student.get("stats", {}).get("total_score", 0),
         "best_score": leaderboard_entry.get("score") if leaderboard_entry else 0,
     }

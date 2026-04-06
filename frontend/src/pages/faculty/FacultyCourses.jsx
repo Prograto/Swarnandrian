@@ -589,7 +589,7 @@ export default function FacultyCourses() {
                 placeholder="Write your blog content here. Use the toolbar for headings, tables, shapes, and rich text formatting..."
               />
               <p className="mt-2 text-[11px] text-secondary">
-                You can insert simple text blocks, tables, and formatting directly from the editor toolbar.
+                Use the toolbar to format text and attach images or videos. Uploaded media is stored in S3.
               </p>
             </Field>
             <div className="grid grid-cols-2 gap-4">

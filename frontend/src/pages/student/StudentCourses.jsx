@@ -87,7 +87,10 @@ function BlogContent({ content }) {
     [&_p]:text-secondary [&_p]:leading-relaxed [&_p]:mb-4
     [&_code]:bg-surface-lighter [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-xs [&_code]:font-mono [&_code]:text-[#4F7CF3]
     [&_pre]:bg-surface-lighter [&_pre]:rounded-2xl [&_pre]:p-4 [&_pre]:overflow-x-auto [&_pre]:my-4
+    [&_img]:my-4 [&_img]:max-w-full [&_img]:rounded-2xl [&_img]:shadow-sm
+    [&_video]:my-4 [&_video]:max-w-full [&_video]:rounded-2xl [&_video]:bg-black
     [&_blockquote]:border-l-4 [&_blockquote]:border-[#4F7CF3] [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-secondary
+    [&_.ql-align-center]:text-center [&_.ql-align-right]:text-right [&_.ql-align-justify]:text-justify
     [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:mb-4 [&_ul_li]:text-secondary [&_ul_li]:mb-1
     [&_ol]:list-decimal [&_ol]:pl-6 [&_ol]:mb-4 [&_ol_li]:text-secondary [&_ol_li]:mb-1
     [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:border-theme [&_td]:p-2 [&_th]:border [&_th]:border-theme [&_th]:p-2 [&_th]:bg-surface-lighter [&_th]:font-semibold`;

@@ -5,6 +5,7 @@ from bson import ObjectId
 import io
 import pandas as pd
 
+from app.core.access import student_access_clauses, student_matches_access
 from app.core.security import require_faculty, get_current_user
 from app.db.mongodb import get_db
 from app.models.schemas import CodingSectionCreate, CodingProblemCreate, Mode
@@ -47,9 +48,11 @@ async def list_sections(
         query["mode"] = mode
     if user.get("role") == "student":
         query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            query["$and"] = query.get("$and", []) + access_clauses
 
     sections = await db.coding_sections.find(query).to_list(200)
-    student_branch = user.get("branch") or user.get("department")
     for s in sections:
         s["id"] = str(s.pop("_id"))
         s["problem_count"] = await db.coding_problems.count_documents({"section_id": s["id"]})
@@ -60,9 +63,6 @@ async def list_sections(
             s for s in sections
             if needle in f"{s.get('name', '')} {s.get('description', '')}".lower()
         ]
-
-    if user.get("role") == "student" and student_branch:
-        sections = [s for s in sections if not s.get("branch") or s.get("branch") == student_branch]
 
     if not paginate:
         return sections
@@ -83,8 +83,7 @@ async def get_section(section_id: str, db=Depends(get_db), user=Depends(get_curr
     if not section:
         raise HTTPException(404, "Section not found")
     if user.get("role") == "student":
-        student_branch = user.get("branch") or user.get("department")
-        if not section.get("is_active", True) or (section.get("branch") and section.get("branch") != student_branch):
+        if not section.get("is_active", True) or not student_matches_access(user, section):
             raise HTTPException(404, "Section not found")
     section["id"] = str(section.pop("_id"))
     return section
@@ -153,11 +152,13 @@ async def list_problems(
         query["mode"] = mode
     if user["role"] == "student":
         query["is_active"] = True
+        access_clauses = student_access_clauses(user)
+        if access_clauses:
+            query["$and"] = query.get("$and", []) + access_clauses
 
-    student_branch = user.get("branch") or user.get("department")
     if user["role"] == "student" and section_id:
         section = await db.coding_sections.find_one({"_id": ObjectId(section_id)})
-        if not section or not section.get("is_active", True) or (section.get("branch") and section.get("branch") != student_branch):
+        if not section or not section.get("is_active", True) or not student_matches_access(user, section):
             return {"problems": [], "total": 0, "page": page, "limit": limit}
 
     if search:
@@ -175,9 +176,6 @@ async def list_problems(
     skip = (page - 1) * limit
     problems = await db.coding_problems.find(query, projection).skip(skip).limit(limit).to_list(limit)
     total = await db.coding_problems.count_documents(query)
-    if user["role"] == "student" and student_branch:
-        problems = [p for p in problems if not p.get("branch") or p.get("branch") == student_branch]
-        total = len(problems)
 
     for p in problems:
         p["id"] = str(p.pop("_id"))
@@ -204,8 +202,7 @@ async def get_problem(problem_id: str, db=Depends(get_db), user=Depends(get_curr
 
     if user["role"] == "student" and problem.get("section_id") and ObjectId.is_valid(str(problem.get("section_id"))):
         section = await db.coding_sections.find_one({"_id": ObjectId(problem.get("section_id"))})
-        student_branch = user.get("branch") or user.get("department")
-        if not section or not section.get("is_active", True) or (section.get("branch") and section.get("branch") != student_branch):
+        if not section or not section.get("is_active", True) or not student_matches_access(user, section) or not student_matches_access(user, problem):
             raise HTTPException(404, "Problem not found")
 
     problem["id"] = str(problem.pop("_id"))

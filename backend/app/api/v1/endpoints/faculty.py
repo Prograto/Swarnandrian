@@ -22,14 +22,16 @@ async def _load_student_map(db, student_ids):
         return {}
     students = await db.students.find(
         {"_id": {"$in": ids}},
-        {"name": 1, "student_id": 1, "department": 1, "year": 1},
+        {"name": 1, "student_id": 1, "department": 1, "course": 1, "year": 1, "section": 1},
     ).to_list(len(ids))
     return {
         str(student["_id"]): {
             "name": student.get("name"),
             "reg_no": student.get("student_id"),
             "branch": student.get("department"),
+            "course": student.get("course"),
             "year": student.get("year"),
+            "section": student.get("section"),
         }
         for student in students
     }
@@ -93,6 +95,50 @@ def _competition_submission_score(row):
     if row.get("total_score") is not None:
         return row.get("total_score")
     return 0
+
+
+def _student_matches_filters(
+    student_info,
+    row,
+    *,
+    student_filter=None,
+    student_name=None,
+    reg_no=None,
+    branch=None,
+    course=None,
+    year=None,
+    section=None,
+):
+    student_display_name = student_info.get("name") or row.get("student_id") or "Unknown"
+    student_reg_no = student_info.get("reg_no")
+    student_branch = student_info.get("branch") or "Unknown"
+    student_course = student_info.get("course") or "Unknown"
+    student_year = student_info.get("year")
+    student_section = student_info.get("section") or "Unknown"
+
+    if branch and branch != "all" and student_branch != branch:
+        return False
+    if course and course != "all" and student_course != course:
+        return False
+    if year not in (None, "", "all"):
+        try:
+            year_value = int(year)
+        except (TypeError, ValueError):
+            year_value = year
+        if student_year != year_value:
+            return False
+    if section and section != "all" and student_section != section:
+        return False
+
+    combined_needle = student_filter
+    if student_name and str(student_name).strip():
+        combined_needle = str(student_name).strip()
+    if combined_needle and not _matches_text(student_display_name, combined_needle) and not _matches_text(student_reg_no, combined_needle) and not _matches_text(row.get("student_id"), combined_needle):
+        return False
+    if reg_no and not _matches_text(student_reg_no, reg_no):
+        return False
+
+    return True
 
 
 @router.get("/me")
@@ -215,6 +261,9 @@ async def evaluation_results(
     student_name: str = None,
     reg_no: str = None,
     branch: str = None,
+    student_course: str = None,
+    student_year: str = None,
+    student_section: str = None,
     exam_type: str = None,
     section: str = None,
     test: str = None,
@@ -264,19 +313,24 @@ async def evaluation_results(
         student_display_name = student_info.get("name") or row.get("student_id") or "Unknown"
         student_reg_no = student_info.get("reg_no")
         student_branch = student_info.get("branch") or "Unknown"
+        student_course_value = student_info.get("course") or "Unknown"
+        student_year_value = student_info.get("year")
+        student_section_value = student_info.get("section") or "Unknown"
         section_id = row.get("section_id")
         section_name = code_section_map.get(str(section_id), section_id or "—")
         test_name = row.get("problem_name") or "Coding Problem"
-        if branch and branch != "all" and student_branch != branch:
+        if not _student_matches_filters(
+            student_info,
+            row,
+            student_filter=student_filter,
+            student_name=student_name,
+            reg_no=reg_no,
+            branch=branch,
+            course=student_course,
+            year=student_year,
+            section=student_section,
+        ):
             continue
-        if student_filter or student_name or reg_no:
-            combined_needle = student_filter
-            if student_name and student_name.strip():
-                combined_needle = student_name.strip()
-            if combined_needle and not _matches_text(student_display_name, combined_needle) and not _matches_text(student_reg_no, combined_needle) and not _matches_text(row.get("student_id"), combined_needle):
-                continue
-            if reg_no and not _matches_text(student_reg_no, reg_no):
-                continue
         if test and not _matches_text(test_name, test):
             continue
 
@@ -292,6 +346,9 @@ async def evaluation_results(
             "student_name": student_display_name,
             "student_reg_no": student_reg_no,
             "branch": student_branch,
+            "student_course": student_course_value,
+            "student_year": student_year_value,
+            "student_section": student_section_value,
             "exam_type": row.get("exam_type", row.get("test_type", "practice")),
             "section_id": section_id,
             "concept_id": section_id,
@@ -311,21 +368,26 @@ async def evaluation_results(
         student_display_name = student_info.get("name") or row.get("student_id") or "Unknown"
         student_reg_no = student_info.get("reg_no")
         student_branch = student_info.get("branch") or "Unknown"
+        student_course_value = student_info.get("course") or "Unknown"
+        student_year_value = student_info.get("year")
+        student_section_value = student_info.get("section") or "Unknown"
         test_info = test_map.get(str(row.get("test_id")), {})
         section_id = row.get("section_id") or test_info.get("section_id")
         section_name = apt_section_map.get(str(section_id), section_id or "—")
         test_name = row.get("test_name") or test_info.get("name") or "Test"
         exam_value = row.get("exam_type") or test_info.get("exam_type") or "practice"
-        if branch and branch != "all" and student_branch != branch:
+        if not _student_matches_filters(
+            student_info,
+            row,
+            student_filter=student_filter,
+            student_name=student_name,
+            reg_no=reg_no,
+            branch=branch,
+            course=student_course,
+            year=student_year,
+            section=student_section,
+        ):
             continue
-        if student_filter or student_name or reg_no:
-            combined_needle = student_filter
-            if student_name and student_name.strip():
-                combined_needle = student_name.strip()
-            if combined_needle and not _matches_text(student_display_name, combined_needle) and not _matches_text(student_reg_no, combined_needle) and not _matches_text(row.get("student_id"), combined_needle):
-                continue
-            if reg_no and not _matches_text(student_reg_no, reg_no):
-                continue
         if test and not _matches_text(test_name, test):
             continue
 
@@ -337,6 +399,9 @@ async def evaluation_results(
             "student_name": student_display_name,
             "student_reg_no": student_reg_no,
             "branch": student_branch,
+            "student_course": student_course_value,
+            "student_year": student_year_value,
+            "student_section": student_section_value,
             "exam_type": exam_value,
             "section_id": section_id,
             "concept_id": row.get("concept_id") or section_id,
@@ -366,6 +431,9 @@ async def evaluation_results(
 
     tests = sorted(list({item.get("test_name") for item in filtered if item.get("test_name")}))
     branches = sorted(list({item.get("branch") for item in filtered if item.get("branch")}))
+    courses = sorted(list({item.get("student_course") for item in filtered if item.get("student_course")}))
+    student_years = sorted(list({item.get("student_year") for item in filtered if item.get("student_year") is not None}), key=lambda value: str(value))
+    student_sections = sorted(list({item.get("student_section") for item in filtered if item.get("student_section")}))
 
     return {
         "items": items,
@@ -375,6 +443,9 @@ async def evaluation_results(
         "sections": sections,
         "tests": tests[:300],
         "branches": branches,
+        "courses": courses,
+        "student_years": student_years,
+        "student_sections": student_sections,
     }
 
 
@@ -386,6 +457,9 @@ async def export_evaluation_results(
     student_name: str = None,
     reg_no: str = None,
     branch: str = None,
+    student_course: str = None,
+    student_year: str = None,
+    student_section: str = None,
     exam_type: str = None,
     section: str = None,
     test: str = None,
@@ -405,6 +479,9 @@ async def export_evaluation_results(
         student_name=student_name,
         reg_no=reg_no,
         branch=branch,
+        student_course=student_course,
+        student_year=student_year,
+        student_section=student_section,
         exam_type=exam_type,
         section=section,
         test=test,
@@ -421,6 +498,9 @@ async def export_evaluation_results(
             "Student Name": item.get("student_name"),
             "Register Number": item.get("student_reg_no"),
             "Branch": item.get("branch"),
+            "Course": item.get("student_course"),
+            "Year": item.get("student_year"),
+            "Student Section": item.get("student_section"),
             "Exam Type": item.get("exam_type"),
             "Section": item.get("section_id"),
             "Test": item.get("test_name"),
@@ -463,6 +543,9 @@ async def evaluation_test_results(
     student_name: str = None,
     reg_no: str = None,
     branch: str = None,
+    student_course: str = None,
+    student_year: str = None,
+    student_section: str = None,
     exam_type: str = None,
     min_score: float = None,
     max_score: float = None,
@@ -500,14 +583,20 @@ async def evaluation_test_results(
         student_display_name = student_info.get("name") or row.get("student_id") or "Unknown"
         student_reg_no = student_info.get("reg_no")
         student_branch = student_info.get("branch") or "Unknown"
-        if branch and branch != "all" and student_branch != branch:
-            continue
-        combined_needle = student_filter
-        if student_name and student_name.strip():
-            combined_needle = student_name.strip()
-        if combined_needle and not _matches_text(student_display_name, combined_needle) and not _matches_text(student_reg_no, combined_needle) and not _matches_text(row.get("student_id"), combined_needle):
-            continue
-        if reg_no and not _matches_text(student_reg_no, reg_no):
+        student_course_value = student_info.get("course") or "Unknown"
+        student_year_value = student_info.get("year")
+        student_section_value = student_info.get("section") or "Unknown"
+        if not _student_matches_filters(
+            student_info,
+            row,
+            student_filter=student_filter,
+            student_name=student_name,
+            reg_no=reg_no,
+            branch=branch,
+            course=student_course,
+            year=student_year,
+            section=student_section,
+        ):
             continue
 
         results.append({
@@ -518,6 +607,9 @@ async def evaluation_test_results(
             "student_name": student_display_name,
             "student_reg_no": student_reg_no,
             "branch": student_branch,
+            "student_course": student_course_value,
+            "student_year": student_year_value,
+            "student_section": student_section_value,
             "exam_type": row.get("exam_type") or test.get("mode", "practice"),
             "section_id": row.get("section_id") or test.get("section_id"),
             "concept_id": row.get("concept_id") or row.get("section_id") or test.get("section_id"),
@@ -547,6 +639,9 @@ async def export_evaluation_test_results(
     student_name: str = None,
     reg_no: str = None,
     branch: str = None,
+    student_course: str = None,
+    student_year: str = None,
+    student_section: str = None,
     exam_type: str = None,
     min_score: float = None,
     max_score: float = None,
@@ -564,6 +659,9 @@ async def export_evaluation_test_results(
         student_name=student_name,
         reg_no=reg_no,
         branch=branch,
+        student_course=student_course,
+        student_year=student_year,
+        student_section=student_section,
         exam_type=exam_type,
         min_score=min_score,
         max_score=max_score,
@@ -577,6 +675,9 @@ async def export_evaluation_test_results(
             "Student Name": item.get("student_name"),
             "Register Number": item.get("student_reg_no"),
             "Branch": item.get("branch"),
+            "Course": item.get("student_course"),
+            "Year": item.get("student_year"),
+            "Student Section": item.get("student_section"),
             "Exam Type": item.get("exam_type"),
             "Section": item.get("section_id"),
             "Test": item.get("test_name"),
@@ -619,6 +720,9 @@ async def competition_test_results(
     student_name: str = None,
     reg_no: str = None,
     branch: str = None,
+    student_course: str = None,
+    student_year: str = None,
+    student_section: str = None,
     min_score: float = None,
     max_score: float = None,
     db=Depends(get_db),
@@ -669,16 +773,21 @@ async def competition_test_results(
         student_display_name = student_info.get("name") or row.get("student_id") or "Unknown"
         student_reg_no = student_info.get("reg_no")
         student_branch = student_info.get("branch") or "Unknown"
+        student_course_value = student_info.get("course") or "Unknown"
+        student_year_value = student_info.get("year")
+        student_section_value = student_info.get("section") or "Unknown"
 
-        if branch and branch != "all" and student_branch != branch:
-            continue
-
-        combined_needle = student_filter
-        if student_name and student_name.strip():
-            combined_needle = student_name.strip()
-        if combined_needle and not _matches_text(student_display_name, combined_needle) and not _matches_text(student_reg_no, combined_needle) and not _matches_text(row.get("student_id"), combined_needle):
-            continue
-        if reg_no and not _matches_text(student_reg_no, reg_no):
+        if not _student_matches_filters(
+            student_info,
+            row,
+            student_filter=student_filter,
+            student_name=student_name,
+            reg_no=reg_no,
+            branch=branch,
+            course=student_course,
+            year=student_year,
+            section=student_section,
+        ):
             continue
 
         status = row.get("status") or "submitted"
@@ -703,6 +812,9 @@ async def competition_test_results(
                 "student_name": student_display_name,
                 "student_reg_no": student_reg_no,
                 "branch": student_branch,
+                "student_course": student_course_value,
+                "student_year": student_year_value,
+                "student_section": student_section_value,
                 "exam_type": row.get("exam_type") or "competitor",
                 "section_id": row.get("section_id") or competition_test.get("test_type") or "competition",
                 "concept_id": row.get("concept_id") or competition_test.get("test_type") or "competition",
@@ -746,6 +858,9 @@ async def export_competition_test_results(
     student_name: str = None,
     reg_no: str = None,
     branch: str = None,
+    student_course: str = None,
+    student_year: str = None,
+    student_section: str = None,
     min_score: float = None,
     max_score: float = None,
     format: str = "xlsx",
@@ -763,6 +878,9 @@ async def export_competition_test_results(
         student_name=student_name,
         reg_no=reg_no,
         branch=branch,
+        student_course=student_course,
+        student_year=student_year,
+        student_section=student_section,
         min_score=min_score,
         max_score=max_score,
         db=db,
@@ -778,6 +896,9 @@ async def export_competition_test_results(
                 "Student Name": item.get("student_name"),
                 "Register Number": item.get("student_reg_no"),
                 "Branch": item.get("branch"),
+                "Course": item.get("student_course"),
+                "Year": item.get("student_year"),
+                "Student Section": item.get("student_section"),
                 "Exam Type": item.get("exam_type"),
                 "Marks": item.get("marks"),
                 "Accuracy %": item.get("accuracy"),

@@ -6,6 +6,15 @@ import PaginationControls from '../../components/student/PaginationControls';
 
 const PAGE_SIZE = 8;
 
+function getAttemptCap(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export default function StudentCompetitionTests() {
   const { competitionId } = useParams();
   const [accessCode, setAccessCode] = useState('');
@@ -110,6 +119,11 @@ export default function StudentCompetitionTests() {
             {items.map((test) => {
               const canWrite = test.test_type === 'aptitude' || test.test_type === 'technical';
               const attempt = attemptMap.get(test.id);
+              const maxAttempts = getAttemptCap(competition?.max_attempts);
+              const attemptsRemaining = maxAttempts === null ? null : Math.max(0, maxAttempts - (attempt?.attempts || 0));
+              const isLocked = canWrite && attemptsRemaining === 0;
+              const writtenCount = attempt?.attempts || 0;
+              const actionLabel = attempt ? 'Retake Test' : 'Write Test';
               return (
                 <div key={test.id} className="rounded-3xl border border-theme bg-surface-card overflow-hidden">
                   <div className="h-32 bg-gradient-to-br from-[#edf2ff] to-[#f8faff]">
@@ -118,14 +132,27 @@ export default function StudentCompetitionTests() {
                   <div className="p-4 space-y-3">
                     <h3 className="font-semibold text-primary line-clamp-1">{test.name}</h3>
                     <p className="text-xs text-secondary line-clamp-2">{test.description || 'Competition test'}</p>
+                    {canWrite ? (
+                      <div className={`rounded-2xl px-3 py-2 text-xs ${attemptsRemaining === null ? 'border border-theme bg-surface text-secondary' : isLocked ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
+                        Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · {attemptsRemaining === null
+                          ? 'Unlimited attempts'
+                          : `${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} left`}
+                      </div>
+                    ) : null}
                     {attempt ? (
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                        Attempted {attempt.attempts} time{attempt.attempts > 1 ? 's' : ''} · Best score {attempt.bestScore}
+                        Best score {attempt.bestScore}
                       </div>
                     ) : null}
                     <div className="text-xs text-secondary">Type: {test.test_type} · {test.time_limit_minutes} min</div>
                     {canWrite ? (
-                      <Link to={`/student/competitions/${competitionId}/tests/${test.id}`} className="btn-primary text-xs w-full justify-center">{attempt ? 'Retake Test' : 'Write Test'}</Link>
+                      isLocked ? (
+                        <div className="btn-primary text-xs w-full justify-center opacity-50 cursor-not-allowed select-none pointer-events-none">
+                          Attempts Exhausted
+                        </div>
+                      ) : (
+                        <Link to={`/student/competitions/${competitionId}/tests/${test.id}`} className="btn-primary text-xs w-full justify-center">{actionLabel}</Link>
+                      )
                     ) : (
                       <div className="rounded-xl border border-dashed border-theme px-3 py-2 text-xs text-secondary text-center">
                         Coding competition tests are currently view-only in this portal.
