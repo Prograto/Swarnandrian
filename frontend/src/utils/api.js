@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || '/api/v1',
+  baseURL: process.env.NODE_ENV === 'development'
+    ? '/api/v1'
+    : (process.env.REACT_APP_API_URL || '/api/v1'),
   timeout: 30000,
 });
 

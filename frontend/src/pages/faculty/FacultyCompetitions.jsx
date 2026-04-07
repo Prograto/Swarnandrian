@@ -42,6 +42,8 @@ const TEST_TYPES = [
   { value:'technical',label:'Technical MCQ',   icon:<RiLeafLine/>,     color:'bg-emerald-50 text-emerald-700 border-emerald-200' },
 ];
 
+const parseTags = (value = '') => value.split(',').map((tag) => tag.trim()).filter(Boolean);
+
 // ── Section modal (create competition) ──────────────────────────────────────
 function CompetitionModal({ open, onClose, onSave, loading, initialData }) {
   const [form, setForm] = useState({
@@ -182,7 +184,7 @@ function CompetitionModal({ open, onClose, onSave, loading, initialData }) {
 // ── Test modal (add test to competition) ─────────────────────────────────────
 function TestModal({ open, onClose, onSave, loading, initialData }) {
   const [form, setForm] = useState({
-    name:'', test_type:'coding', time_limit_minutes:60,
+    name:'', test_type:'coding', section_id:'', tags:'', time_limit_minutes:60,
     access_code:'', banner_url:'', description:'', question_ids:[], problem_ids:[],
   });
   const [questionIdsText, setQuestionIdsText] = useState('');
@@ -197,6 +199,8 @@ function TestModal({ open, onClose, onSave, loading, initialData }) {
       setForm({
         name: initialData.name || '',
         test_type: initialData.test_type || 'coding',
+        section_id: initialData.section_id || '',
+        tags: Array.isArray(initialData.tags) ? initialData.tags.join(', ') : '',
         time_limit_minutes: initialData.time_limit_minutes || 60,
         access_code: initialData.access_code || '',
         banner_url: initialData.banner_url || '',
@@ -207,12 +211,33 @@ function TestModal({ open, onClose, onSave, loading, initialData }) {
       setQuestionIdsText((initialData.question_ids || []).join(','));
       setProblemIdsText((initialData.problem_ids || []).join(','));
     } else {
-      setForm({ name:'', test_type:'coding', time_limit_minutes:60, access_code:'', banner_url:'', description:'', question_ids:[], problem_ids:[] });
+      setForm({ name:'', test_type:'coding', section_id:'', tags:'', time_limit_minutes:60, access_code:'', banner_url:'', description:'', question_ids:[], problem_ids:[] });
       setQuestionIdsText('');
       setProblemIdsText('');
       setBulkFile(null);
     }
   }, [open, initialData]);
+
+  const isCodingTest = form.test_type === 'coding';
+  const sectionApiBase = isCodingTest ? '/coding' : `/${form.test_type}`;
+  const { data: availableSections = [] } = useQuery(
+    ['competition-test-modal-sections', form.test_type],
+    () => api.get(`${sectionApiBase}/sections`, { params: { mode: 'competitor' } }).then((r) => r.data || []),
+    { enabled: open }
+  );
+
+  const setTestType = (value) => {
+    setForm((prev) => ({
+      ...prev,
+      test_type: value,
+      section_id: '',
+      tags: '',
+      question_ids: [],
+      problem_ids: [],
+    }));
+    setQuestionIdsText('');
+    setProblemIdsText('');
+  };
 
   if (!open) return null;
 
@@ -281,12 +306,29 @@ function TestModal({ open, onClose, onSave, loading, initialData }) {
             <label className="text-xs font-semibold text-gray-500 mb-2 block">Test Type</label>
             <div className="grid grid-cols-3 gap-2">
               {TEST_TYPES.map(t=>(
-                <button key={t.value} onClick={()=>f('test_type',t.value)}
+                <button key={t.value} onClick={()=>setTestType(t.value)}
                   className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl border-2 text-xs font-semibold transition-all ${form.test_type===t.value?'border-[#4F7CF3] bg-blue-50 text-[#4F7CF3]':'border-gray-100 text-gray-500 hover:border-blue-200'}`}>
                   <span className="text-lg">{t.icon}</span>{t.label}
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Content Section <span className="text-gray-300 font-normal">(optional)</span></label>
+            <select className="input" value={form.section_id} onChange={(e) => f('section_id', e.target.value)}>
+              <option value="">Choose a section</option>
+              {availableSections.map((section) => (
+                <option key={section.id} value={section.id}>{section.name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-[11px] text-secondary">Leave it blank to keep the test generic, or choose a section if you want a fixed question bank source.</p>
+          </div>
+
+          <div>
+            <label className="text-xs font-semibold text-gray-500 mb-1.5 block">Tags <span className="text-gray-300 font-normal">(optional)</span></label>
+            <input className="input" placeholder="round 1, elimination, beginner-friendly" value={form.tags} onChange={(e) => f('tags', e.target.value)} />
+            <p className="mt-1 text-[11px] text-secondary">Use tags to label the competition test without tying it to a specific section.</p>
           </div>
 
           {/* Time + access code */}
@@ -360,13 +402,13 @@ export default function FacultyCompetitions() {
   );
 
   const addTest = useMutation(
-    ({compId,data})=>api.post(`/competitions/${compId}/tests`,{...data,competition_id:compId}),
+    ({compId,data})=>api.post(`/competitions/${compId}/tests`,{...data,competition_id:compId,tags:parseTags(data.tags)}),
     { onSuccess:()=>{ qc.invalidateQueries('competitions'); setShowTest(null); toast.success('Test added!'); },
       onError:err=>toast.error(err?.response?.data?.detail||'Failed to add test') }
   );
 
   const updateTest = useMutation(
-    ({ compId, testId, data }) => api.put(`/competitions/${compId}/tests/${testId}`, { ...data, competition_id: compId }),
+    ({ compId, testId, data }) => api.put(`/competitions/${compId}/tests/${testId}`, { ...data, competition_id: compId, tags: parseTags(data.tags) }),
     {
       onSuccess: () => {
         qc.invalidateQueries(['competition-tests', expanded]);
@@ -563,6 +605,13 @@ export default function FacultyCompetitions() {
                           <p className="text-sm font-semibold text-primary truncate">{t.name}</p>
                           <p className="text-xs text-secondary capitalize">{t.test_type} • {t.time_limit_minutes} min</p>
                           {t.description ? <p className="text-[11px] text-secondary mt-1 line-clamp-2">{t.description}</p> : null}
+                          {Array.isArray(t.tags) && t.tags.length > 0 ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {t.tags.map((tag) => (
+                                <span key={tag} className="badge badge-medium text-[11px]">{tag}</span>
+                              ))}
+                            </div>
+                          ) : null}
                           <p className="text-[11px] text-secondary mt-1">{t.is_active === false ? 'Disabled' : 'Enabled'}</p>
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap">

@@ -146,7 +146,7 @@ function ChatbotGate() {
   const location = useLocation();
   if (!user || user.role === 'admin') return null;
   const pathname = location.pathname;
-  const onExamRoute = /^\/test\/[^/]+$/.test(pathname) || /^\/student\/competitions\/[^/]+\/tests\/[^/]+$/.test(pathname);
+  const onExamRoute = /^\/test\/[^/]+$/.test(pathname) || /^\/student\/competitions\/[^/]+\/tests\/[^/]+$/.test(pathname) || /^\/code\/[^/]+$/.test(pathname) || /^\/problem\/[^/]+$/.test(pathname);
   if (onExamRoute) return null;
   return <ChatbotWidget />;
 }

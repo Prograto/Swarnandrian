@@ -27,6 +27,7 @@ export default function FacultyCompetitionTestEditor() {
     banner_url: '',
     description: '',
     section_id: '',
+    tags: '',
     test_type: 'coding',
     time_limit_minutes: 60,
     max_violations: 3,
@@ -85,6 +86,7 @@ export default function FacultyCompetitionTestEditor() {
       banner_url: test.banner_url || '',
       description: test.description || '',
       section_id: test.section_id || '',
+      tags: Array.isArray(test.tags) ? test.tags.join(', ') : '',
       test_type: test.test_type || 'coding',
       time_limit_minutes: test.time_limit_minutes || 60,
       max_violations: test.max_violations ?? 3,
@@ -150,10 +152,14 @@ export default function FacultyCompetitionTestEditor() {
     { enabled: isCodingTest && !!form.section_id }
   );
   const codingProblems = codingProblemsData?.problems || [];
-  const linkedSectionName = useMemo(() => {
-    const allSections = [...sections, ...codingSections];
-    return allSections.find((section) => section.id === form.section_id)?.name || form.section_id || 'No section linked';
-  }, [sections, codingSections, form.section_id]);
+  const availableSections = isCodingTest ? codingSections : sections;
+  const hasLinkedSection = !!form.section_id;
+
+  React.useEffect(() => {
+    if (!form.section_id && availableSections.length === 1) {
+      setForm((prev) => ({ ...prev, section_id: availableSections[0].id }));
+    }
+  }, [availableSections, form.section_id]);
 
   const payload = useMemo(() => ({
     competition_id: competitionId,
@@ -161,6 +167,7 @@ export default function FacultyCompetitionTestEditor() {
     banner_url: form.banner_url || undefined,
     description: form.description || undefined,
     section_id: form.section_id || undefined,
+    tags: form.tags ? form.tags.split(',').map((tag) => tag.trim()).filter(Boolean) : [],
     test_type: form.test_type,
     time_limit_minutes: Number(form.time_limit_minutes) || 60,
     max_violations: Number(form.max_violations) || 3,
@@ -275,7 +282,7 @@ export default function FacultyCompetitionTestEditor() {
 
   const saveQuestion = () => {
     if (!form.section_id) {
-      toast.error('Choose a section first');
+      toast.error('Select a linked section first');
       return;
     }
     const opts = qForm.options ? qForm.options.split('|').map((o) => o.trim()).filter(Boolean) : null;
@@ -347,7 +354,7 @@ export default function FacultyCompetitionTestEditor() {
 
   const saveCodingProblem = () => {
     if (!form.section_id) {
-      toast.error('Choose a coding section first');
+      toast.error('Select a linked coding section first');
       return;
     }
     const data = {
@@ -378,7 +385,7 @@ export default function FacultyCompetitionTestEditor() {
 
   const bulkUploadCodingProblems = async (file) => {
     if (!file || !form.section_id) {
-      toast.error('Choose a coding section first');
+      toast.error('Select a linked coding section first');
       return;
     }
     const fd = new FormData();
@@ -396,7 +403,7 @@ export default function FacultyCompetitionTestEditor() {
 
   const bulkUploadQuestions = async (file) => {
     if (!file || !form.section_id) {
-      toast.error('Choose a section first');
+      toast.error('Select a linked section first');
       return;
     }
     const fd = new FormData();
@@ -476,12 +483,9 @@ export default function FacultyCompetitionTestEditor() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div>
-                  <label className="text-xs text-secondary font-semibold">Linked Section</label>
-                  <div className="input mt-1 flex items-center justify-between gap-2">
-                    <span className="truncate text-primary">{linkedSectionName}</span>
-                    <span className="text-[11px] text-secondary shrink-0">Fixed</span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-secondary">This competition test keeps the section from the existing test record.</p>
+                  <label className="text-xs text-secondary font-semibold">Tags</label>
+                  <input className="input mt-1" placeholder="round 1, elimination, debug" value={form.tags} onChange={(e) => setForm((p) => ({ ...p, tags: e.target.value }))} />
+                  <p className="mt-1 text-[11px] text-secondary">Use tags to label the competition test instead of a fixed linked section.</p>
                 </div>
                 <div>
                   <label className="text-xs text-secondary font-semibold">Time Limit (minutes)</label>
@@ -496,6 +500,18 @@ export default function FacultyCompetitionTestEditor() {
                   <input className="input mt-1" value={form.access_code} onChange={(e) => setForm((p) => ({ ...p, access_code: e.target.value }))} />
                 </div>
               </div>
+              {!hasLinkedSection ? (
+                <div>
+                  <label className="text-xs text-secondary font-semibold">Content Section</label>
+                  <select className="input mt-1" value={form.section_id} onChange={(e) => setForm((p) => ({ ...p, section_id: e.target.value }))}>
+                    <option value="">Choose a section</option>
+                    {availableSections.map((section) => (
+                      <option key={section.id} value={section.id}>{section.name}</option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-secondary">Pick a section only if this legacy test still needs a fixed question bank source.</p>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-secondary font-semibold">Branch Access</label>

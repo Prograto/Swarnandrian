@@ -1,5 +1,5 @@
-import React, { useState, useRef } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import Editor from '@monaco-editor/react';
@@ -14,6 +14,7 @@ import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import CloudUploadRoundedIcon from '@mui/icons-material/CloudUploadRounded';
 import AutorenewRoundedIcon from '@mui/icons-material/AutorenewRounded';
+import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { useCodeRunnerWarmup } from '../../hooks/useCodeRunnerWarmup';
 
 const LANGUAGES = [
@@ -67,6 +68,8 @@ function TestCaseResult({ tc }) {
 
 export default function CodeEditor() {
   const { id: problemId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   useCodeRunnerWarmup();
 
   const editorRef = useRef(null);
@@ -76,6 +79,63 @@ export default function CodeEditor() {
   const [tab, setTab]         = useState('problem'); // problem | results
   const [result, setResult]   = useState(null);
   const [running, setRunning] = useState(false);
+  const [tabWarnings, setTabWarnings] = useState(0);
+  const [showWarning, setShowWarning] = useState(false);
+  const [fullscreenLost, setFullscreenLost] = useState(false);
+  const submitLockRef = useRef(false);
+  const submittedRef = useRef(false);
+  const violationCountRef = useRef(0);
+  const competitionDraftsRef = useRef(new Map());
+  const activeProblemIdRef = useRef(problemId);
+  const competitionSubmitRef = useRef(null);
+
+  const searchParams = new URLSearchParams(location.search);
+  const competitionId = searchParams.get('competitionId');
+  const competitionTestId = searchParams.get('competitionTestId');
+  const competitionMode = searchParams.get('source') === 'competition' || !!competitionId || !!competitionTestId;
+  const competitionSearch = competitionMode && competitionId && competitionTestId
+    ? `?competitionId=${encodeURIComponent(competitionId)}&competitionTestId=${encodeURIComponent(competitionTestId)}&source=competition`
+    : location.search;
+
+  const { data: competitionTest } = useQuery(
+    ['competition-coding-test', competitionId, competitionTestId],
+    async () => {
+      const response = await api.get(`/competitions/${competitionId}/tests`);
+      const tests = Array.isArray(response.data) ? response.data : [];
+      return tests.find((test) => test.id === competitionTestId) || null;
+    },
+    { enabled: competitionMode && !!competitionId && !!competitionTestId, staleTime: 60_000, retry: false }
+  );
+
+  const competitionProblemIds = Array.isArray(competitionTest?.problem_ids)
+    ? competitionTest.problem_ids.filter(Boolean)
+    : [];
+  const activeCompetitionProblemIndex = competitionProblemIds.findIndex((candidateId) => candidateId === problemId);
+  const competitionProblemPosition = activeCompetitionProblemIndex >= 0 ? activeCompetitionProblemIndex : 0;
+  const competitionProblemTotal = competitionProblemIds.length;
+  const hasCompetitionQueue = competitionProblemTotal > 0;
+
+  const goToCompetitionProblem = useCallback((targetProblemId) => {
+    if (!targetProblemId) return;
+    if (competitionMode && problemId) {
+      competitionDraftsRef.current.set(problemId, { code, langId: lang.id });
+    }
+    navigate(`/code/${targetProblemId}${competitionSearch}`);
+  }, [competitionMode, competitionSearch, code, lang.id, navigate, problemId]);
+
+  const requestFullscreen = useCallback(() => {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {
+        setFullscreenLost(true);
+      });
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  }, []);
 
   const { data: problem, isLoading } = useQuery(
     ['problem', problemId],
@@ -87,22 +147,145 @@ export default function CodeEditor() {
     {
       onMutate: () => setRunning(true),
       onSettled: () => setRunning(false),
-      onSuccess: (data) => {
+      onSuccess: (data, variables) => {
         setResult(data.data);
         setTab('results');
         if (data.data.status === 'accepted') toast.success('Accepted');
         else toast.error(`${data.data.status?.replace(/_/g,' ')}`);
+        if (competitionMode && variables?.mode === 'submit') {
+          submittedRef.current = true;
+          submitLockRef.current = false;
+          exitFullscreen();
+        }
       },
       onError: (err) => toast.error(err.response?.data?.detail || 'Submission failed'),
     }
   );
 
+  const handleSubmit = useCallback((mode) => {
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    submitMut.mutate(
+      { mode },
+      {
+        onSettled: () => {
+          submitLockRef.current = false;
+
+  useEffect(() => {
+    competitionSubmitRef.current = handleSubmit;
+  }, [handleSubmit]);
+        },
+      }
+    );
+  }, [submitMut]);
+
+  const registerViolation = useCallback((reason) => {
+    if (!competitionMode || submittedRef.current) return violationCountRef.current;
+
+    const next = violationCountRef.current + 1;
+    violationCountRef.current = next;
+    setTabWarnings(next);
+
+    if (next >= 3) {
+      setShowWarning(false);
+      toast.error(`Maximum ${reason.toLowerCase()} violations reached. Auto-submitting!`);
+      competitionSubmitRef.current?.('submit');
+    } else {
+      setShowWarning(true);
+      toast.error(`${reason} detected. Warning ${next}/3`);
+    }
+
+    return next;
+  }, [competitionMode]);
+
   const handleLangChange = (newLang) => {
     setLang(newLang);
     setCode(newLang.default);
+    if (competitionMode && problemId) {
+      competitionDraftsRef.current.set(problemId, { code: newLang.default, langId: newLang.id });
+    }
   };
 
   const handleEditorMount = (editor) => { editorRef.current = editor; };
+
+  useEffect(() => {
+    if (!competitionMode) return undefined;
+
+    const requestFS = () => {
+      if (submittedRef.current) return;
+      requestFullscreen();
+    };
+
+    requestFS();
+
+    const onVisibility = () => {
+      if (document.hidden && !submittedRef.current) {
+        registerViolation('Tab switch');
+      }
+    };
+
+    const onFullscreenChange = () => {
+      if (submittedRef.current) {
+        setFullscreenLost(false);
+        setShowWarning(false);
+        return;
+      }
+
+      if (!document.fullscreenElement) {
+        setFullscreenLost(true);
+        const next = registerViolation('Fullscreen exit');
+        if (next < 3) {
+          setTimeout(requestFS, 1000);
+        }
+      } else {
+        setFullscreenLost(false);
+        setShowWarning(false);
+      }
+    };
+
+    const prevent = (event) => event.preventDefault();
+
+    document.addEventListener('visibilitychange', onVisibility);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('contextmenu', prevent);
+    document.addEventListener('copy', prevent);
+    document.addEventListener('cut', prevent);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('contextmenu', prevent);
+      document.removeEventListener('copy', prevent);
+      document.removeEventListener('cut', prevent);
+    };
+  }, [competitionMode, exitFullscreen, registerViolation, requestFullscreen]);
+
+  useEffect(() => {
+    if (competitionMode && problemId && activeProblemIdRef.current === problemId) {
+      competitionDraftsRef.current.set(problemId, { code, langId: lang.id });
+    }
+  }, [code, competitionMode, lang.id, problemId]);
+
+  useEffect(() => {
+    activeProblemIdRef.current = problemId;
+    submittedRef.current = false;
+    submitLockRef.current = false;
+    violationCountRef.current = 0;
+    setTabWarnings(0);
+    setShowWarning(false);
+    setFullscreenLost(false);
+    setResult(null);
+    setTab('problem');
+    const savedDraft = competitionMode && problemId ? competitionDraftsRef.current.get(problemId) : null;
+    if (savedDraft) {
+      const savedLanguage = LANGUAGES.find((candidate) => candidate.id === savedDraft.langId) || LANGUAGES[0];
+      setLang(savedLanguage);
+      setCode(savedDraft.code || savedLanguage.default);
+    } else {
+      setCode(lang.default);
+    }
+    setRunning(false);
+  }, [problemId]);
 
   if (isLoading) return (
     <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -110,11 +293,39 @@ export default function CodeEditor() {
     </div>
   );
 
+  const backTarget = competitionMode && competitionId ? `/student/competitions/${competitionId}` : '/student/coding/practice';
+
   return (
     <div className="min-h-screen bg-surface flex flex-col">
+      <AnimatePresence>
+        {competitionMode && showWarning ? (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+          >
+            <div className="card max-w-sm border-red-500/40 p-8 text-center">
+              <p className="mb-3 inline-flex text-4xl text-red-500"><WarningAmberRoundedIcon sx={{ fontSize: 34 }} /></p>
+              <h3 className="font-display text-xl font-bold text-red-400">Fullscreen required!</h3>
+              <p className="mt-2 text-sm text-secondary">Violations: {tabWarnings}/3. Keep the editor in fullscreen while solving the problem.</p>
+              <button type="button" onClick={() => { requestFullscreen(); }} className="btn-primary mt-4 w-full">Resume</button>
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
       {/* Top Bar */}
       <header className="flex flex-wrap items-center gap-3 px-4 py-3 border-b border-theme bg-surface-light">
-        <Link to="/student/coding/practice" className="inline-flex items-center gap-1.5 text-secondary hover:text-primary transition-colors text-sm">
+        <Link
+          to={backTarget}
+          onClick={() => {
+            if (competitionMode) {
+              exitFullscreen();
+            }
+          }}
+          className="inline-flex items-center gap-1.5 text-secondary hover:text-primary transition-colors text-sm"
+        >
           <ArrowBackRoundedIcon sx={{ fontSize: 16 }} /> Back
         </Link>
         <div className="flex-1 min-w-0">
@@ -123,8 +334,39 @@ export default function CodeEditor() {
             <span className={`badge-${problem?.difficulty?.toLowerCase()}`}>{problem?.difficulty}</span>
             {problem?.marks && <span className="badge bg-amber-500/10 text-amber-600">{problem?.marks}pts</span>}
             <span className="badge bg-surface-lighter text-secondary font-mono text-xs">{problem?.problem_id}</span>
+            {competitionMode ? <span className="badge bg-primary/10 text-primary text-xs">Competition mode</span> : null}
+            {competitionMode && fullscreenLost ? <span className="badge bg-amber-500/10 text-amber-600 text-xs">Fullscreen required</span> : null}
+            {competitionMode && hasCompetitionQueue ? (
+              <span className="badge bg-surface-lighter text-secondary text-xs">
+                Question {competitionProblemPosition + 1} of {competitionProblemTotal}
+              </span>
+            ) : null}
           </div>
         </div>
+
+        {competitionMode && hasCompetitionQueue ? (
+          <div className="flex items-center gap-2 rounded-2xl border border-theme bg-surface px-3 py-2">
+            <button
+              type="button"
+              onClick={() => goToCompetitionProblem(competitionProblemIds[competitionProblemPosition - 1])}
+              disabled={competitionProblemPosition <= 0}
+              className="btn-secondary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <ArrowBackRoundedIcon sx={{ fontSize: 14 }} /> Prev
+            </button>
+            <span className="text-[11px] text-secondary whitespace-nowrap">
+              {competitionProblemPosition + 1}/{competitionProblemTotal}
+            </span>
+            <button
+              type="button"
+              onClick={() => goToCompetitionProblem(competitionProblemIds[competitionProblemPosition + 1])}
+              disabled={competitionProblemPosition >= competitionProblemTotal - 1}
+              className="btn-secondary text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next <ArrowForwardRoundedIcon sx={{ fontSize: 14 }} />
+            </button>
+          </div>
+        ) : null}
 
         {/* Language selector */}
         <select
@@ -146,14 +388,14 @@ export default function CodeEditor() {
 
         {/* Actions */}
         <button
-          onClick={() => submitMut.mutate({ mode: 'run' })}
+          onClick={() => handleSubmit('run')}
           disabled={running}
           className="btn-secondary text-sm"
         >
           <PlayArrowRoundedIcon sx={{ fontSize: 16 }} /> Run
         </button>
         <button
-          onClick={() => submitMut.mutate({ mode: 'submit' })}
+          onClick={() => handleSubmit('submit')}
           disabled={running}
           className="btn-primary text-sm"
         >

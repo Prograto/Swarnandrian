@@ -32,7 +32,9 @@ import LocationOnRoundedIcon from '@mui/icons-material/LocationOnRounded';
 import CallRoundedIcon from '@mui/icons-material/CallRounded';
 
 const publicApi = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || '/api/v1',
+  baseURL: process.env.NODE_ENV === 'development'
+    ? '/api/v1'
+    : (process.env.REACT_APP_API_URL || '/api/v1'),
   timeout: 30000,
 });
 

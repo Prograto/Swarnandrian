@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import api from '../../utils/api';
 import PaginationControls from '../../components/student/PaginationControls';
@@ -13,6 +13,53 @@ function getAttemptCap(value) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function CodingTestLauncher({ competitionId, test }) {
+  const navigate = useNavigate();
+  const problemIds = Array.isArray(test.problem_ids) ? test.problem_ids.filter(Boolean) : [];
+  if (problemIds.length === 0) {
+    return (
+      <div className="rounded-xl border border-dashed border-theme px-3 py-3 text-xs text-secondary text-center">
+        No coding problems attached to this test.
+      </div>
+    );
+  }
+
+  const firstProblemId = problemIds[0];
+  const target = `/code/${firstProblemId}?competitionId=${competitionId}&competitionTestId=${test.id}&source=competition`;
+
+  const handleStart = useCallback(() => {
+    const fullscreenPromise = document.documentElement?.requestFullscreen
+      ? document.documentElement.requestFullscreen().catch(() => {})
+      : Promise.resolve();
+
+    Promise.resolve(fullscreenPromise).then(() => {
+      navigate(target);
+    });
+  }, [navigate, target]);
+
+  return (
+    <div className="rounded-2xl border border-theme bg-surface-lighter/40 p-3 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-[0.14em] text-secondary">Coding Test</p>
+          <p className="text-[11px] text-secondary mt-1">Questions open one by one inside the editor. Use Next and Previous to move between them.</p>
+        </div>
+        <span className="badge bg-surface text-secondary text-[11px]">{problemIds.length} problems</span>
+      </div>
+
+      <div className="rounded-xl border border-theme bg-surface-card p-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold text-primary truncate">Start coding test</p>
+          <p className="text-[11px] text-secondary">Only one problem is shown at a time. The editor will move to the next question after you submit or use the navigation buttons.</p>
+        </div>
+        <button type="button" onClick={handleStart} className="btn btn-secondary btn-xs shrink-0">
+          Start
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function StudentCompetitionTests() {
@@ -117,11 +164,12 @@ export default function StudentCompetitionTests() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {items.map((test) => {
-              const canWrite = test.test_type === 'aptitude' || test.test_type === 'technical';
+              const isQuestionTest = test.test_type === 'aptitude' || test.test_type === 'technical';
+              const isCodingTest = test.test_type === 'coding';
               const attempt = attemptMap.get(test.id);
               const maxAttempts = getAttemptCap(competition?.max_attempts);
               const attemptsRemaining = maxAttempts === null ? null : Math.max(0, maxAttempts - (attempt?.attempts || 0));
-              const isLocked = canWrite && attemptsRemaining === 0;
+              const isLocked = isQuestionTest && attemptsRemaining === 0;
               const writtenCount = attempt?.attempts || 0;
               const actionLabel = attempt ? 'Retake Test' : 'Write Test';
               return (
@@ -132,7 +180,7 @@ export default function StudentCompetitionTests() {
                   <div className="p-4 space-y-3">
                     <h3 className="font-semibold text-primary line-clamp-1">{test.name}</h3>
                     <p className="text-xs text-secondary line-clamp-2">{test.description || 'Competition test'}</p>
-                    {canWrite ? (
+                    {isQuestionTest ? (
                       <div className={`rounded-2xl px-3 py-2 text-xs ${attemptsRemaining === null ? 'border border-theme bg-surface text-secondary' : isLocked ? 'border border-red-200 bg-red-50 text-red-700' : 'border border-emerald-200 bg-emerald-50 text-emerald-700'}`}>
                         Written {writtenCount} time{writtenCount === 1 ? '' : 's'} · {attemptsRemaining === null
                           ? 'Unlimited attempts'
@@ -145,7 +193,7 @@ export default function StudentCompetitionTests() {
                       </div>
                     ) : null}
                     <div className="text-xs text-secondary">Type: {test.test_type} · {test.time_limit_minutes} min</div>
-                    {canWrite ? (
+                    {isQuestionTest ? (
                       isLocked ? (
                         <div className="btn-primary text-xs w-full justify-center opacity-50 cursor-not-allowed select-none pointer-events-none">
                           Attempts Exhausted
@@ -153,9 +201,11 @@ export default function StudentCompetitionTests() {
                       ) : (
                         <Link to={`/student/competitions/${competitionId}/tests/${test.id}`} className="btn-primary text-xs w-full justify-center">{actionLabel}</Link>
                       )
+                    ) : isCodingTest ? (
+                      <CodingTestLauncher competitionId={competitionId} test={test} />
                     ) : (
                       <div className="rounded-xl border border-dashed border-theme px-3 py-2 text-xs text-secondary text-center">
-                        Coding competition tests are currently view-only in this portal.
+                        This competition test cannot be opened from this portal.
                       </div>
                     )}
                   </div>

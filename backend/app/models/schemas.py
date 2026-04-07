@@ -304,6 +304,7 @@ class CompetitionTestCreate(BaseModel):
     description: Optional[str] = None
     section_id: Optional[str] = None
     test_type: str    # coding | aptitude | technical
+    tags: Optional[List[str]] = None
     question_ids: Optional[List[str]] = None
     problem_ids: Optional[List[str]] = None
     time_limit_minutes: int
