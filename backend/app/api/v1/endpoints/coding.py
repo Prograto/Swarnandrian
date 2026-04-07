@@ -1,5 +1,7 @@
+import json
+import re
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from typing import Optional
+from typing import Any, Optional
 from datetime import datetime
 from bson import ObjectId
 import io
@@ -9,8 +11,55 @@ from app.core.access import student_access_clauses, student_matches_access
 from app.core.security import require_faculty, get_current_user
 from app.db.mongodb import get_db
 from app.models.schemas import CodingSectionCreate, CodingProblemCreate, Mode
+from app.utils.bulk_upload import CODING_TEMPLATE_COLUMNS, build_excel_template, cell_bool, cell_int, cell_text
 
 router = APIRouter()
+
+
+def _parse_private_test_cases(value: Any) -> list[dict[str, str]]:
+    text = cell_text(value)
+    if text is None:
+        return []
+
+    normalized = text.strip()
+    if not normalized or normalized.lower() in {"none", "null", "na", "n/a", "-"}:
+        return []
+
+    parsed = None
+    try:
+        parsed = json.loads(normalized)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        parsed = None
+
+    cases: list[dict[str, str]] = []
+    if isinstance(parsed, dict):
+        parsed = [parsed]
+    if isinstance(parsed, list):
+        for item in parsed:
+            if not isinstance(item, dict):
+                continue
+            input_text = cell_text(item.get("input"))
+            expected_text = cell_text(item.get("expected_output"))
+            if input_text is None or expected_text is None:
+                continue
+            cases.append({"input": input_text, "expected_output": expected_text})
+        if cases:
+            return cases
+
+    for chunk in re.split(r"[\r\n|]+", normalized):
+        piece = chunk.strip()
+        if not piece or "=>" not in piece:
+            continue
+        input_text, expected_text = piece.split("=>", 1)
+        input_text = input_text.strip()
+        expected_text = expected_text.strip()
+        if input_text and expected_text:
+            cases.append({"input": input_text, "expected_output": expected_text})
+
+    if cases:
+        return cases
+
+    raise ValueError("private_test_cases must be a JSON array of {input, expected_output} objects or input=>expected_output pairs")
 
 
 # ─── Sections ────────────────────────────────────────────────────────────────
@@ -250,33 +299,50 @@ async def bulk_upload_problems(
     content = await file.read()
     df = pd.read_excel(io.BytesIO(content))
     created, errors = 0, []
+    normalized_mode = (mode or "practice").lower()
 
     for idx, row in df.iterrows():
         try:
-            problem_id = str(row.get("problem_id", "")).strip()
+            problem_id = cell_text(row.get("problem_id"))
             if not problem_id:
                 raise ValueError("problem_id is required")
             if await db.coding_problems.find_one({"problem_id": problem_id}):
                 raise ValueError("problem_id already exists")
 
+            name = cell_text(row.get("name"))
+            if not name:
+                raise ValueError("name is required")
+
+            statement = cell_text(row.get("statement"))
+            if not statement:
+                raise ValueError("statement is required")
+
+            sample_input_1 = cell_text(row.get("sample_input_1"))
+            if sample_input_1 is None:
+                raise ValueError("sample_input_1 is required")
+
+            sample_output_1 = cell_text(row.get("sample_output_1"))
+            if sample_output_1 is None:
+                raise ValueError("sample_output_1 is required")
+
             doc = {
                 "problem_id": problem_id,
                 "section_id": section_id,
-                "mode": mode,
-                "banner_url": row.get("banner_url") or None,
-                "name": str(row.get("name", "")).strip(),
-                "statement": str(row.get("statement", "")).strip(),
-                "constraints": str(row.get("constraints", "")).strip(),
-                "sample_input_1": str(row.get("sample_input_1", "")).strip(),
-                "sample_output_1": str(row.get("sample_output_1", "")).strip(),
-                "sample_input_2": str(row.get("sample_input_2", "")).strip(),
-                "sample_output_2": str(row.get("sample_output_2", "")).strip(),
-                "private_test_cases": [],
-                "difficulty": str(row.get("difficulty", "Medium")),
-                "marks": int(row.get("marks", 0)) if mode == "competitor" else None,
-                "editorial": str(row.get("editorial", "")).strip() if mode == "practice" else None,
-                "branch": row.get("branch") or None,
-                "is_active": bool(row.get("is_active", True)),
+                "mode": normalized_mode,
+                "banner_url": cell_text(row.get("banner_url")),
+                "name": name,
+                "statement": statement,
+                "constraints": cell_text(row.get("constraints"), "") or "",
+                "sample_input_1": sample_input_1,
+                "sample_output_1": sample_output_1,
+                "sample_input_2": cell_text(row.get("sample_input_2"), "") or "",
+                "sample_output_2": cell_text(row.get("sample_output_2"), "") or "",
+                "private_test_cases": _parse_private_test_cases(row.get("private_test_cases")),
+                "difficulty": (cell_text(row.get("difficulty"), "Medium") or "Medium").title(),
+                "marks": cell_int(row.get("marks"), 0) if normalized_mode == "competitor" else None,
+                "editorial": cell_text(row.get("editorial")) if normalized_mode == "practice" else None,
+                "branch": cell_text(row.get("branch")),
+                "is_active": cell_bool(row.get("is_active"), True),
                 "created_by": user["id"],
                 "created_at": datetime.utcnow(),
             }
@@ -286,3 +352,13 @@ async def bulk_upload_problems(
             errors.append({"row": idx + 2, "error": str(e)})
 
     return {"created": created, "errors": errors}
+
+
+@router.get("/problems/bulk-upload/template")
+async def download_problem_template(mode: str = "practice", _=Depends(require_faculty)):
+    normalized_mode = (mode or "practice").lower()
+    return build_excel_template(
+        CODING_TEMPLATE_COLUMNS,
+        f"coding_{normalized_mode}_problems_template.xlsx",
+        sheet_name="Problems",
+    )

@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import DashboardLayout from '../../components/common/DashboardLayout';
+import BulkUploadTemplateCard from '../../components/common/BulkUploadTemplateCard';
 import { FACULTY_NAV } from './FacultyDashboard';
 import api from '../../utils/api';
+import { CODING_TEMPLATE_COLUMNS, CODING_TEMPLATE_NOTES, downloadExcelTemplate } from '../../utils/bulkUploadTemplates';
 import MenuBookRoundedIcon from '@mui/icons-material/MenuBookRounded';
 import EmojiEventsRoundedIcon from '@mui/icons-material/EmojiEventsRounded';
 import FolderOpenRoundedIcon from '@mui/icons-material/FolderOpenRounded';
@@ -116,6 +118,14 @@ export default function FacultyCoding() {
       toast.error('Bulk upload failed');
     }
     e.target.value = '';
+  };
+
+  const downloadProblemTemplate = async () => {
+    try {
+      await downloadExcelTemplate(api, `/coding/problems/bulk-upload/template?mode=${mode}`, `coding_${mode}_problems_template.xlsx`);
+    } catch {
+      toast.error('Template download failed');
+    }
   };
 
   const resetProblemForm = () => {
@@ -391,37 +401,17 @@ export default function FacultyCoding() {
           {/* Problems */}
           <div className="lg:col-span-3 space-y-3">
             {selectedSection && (
-              <div className="card p-4 border border-dashed border-theme bg-surface-card/80">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-primary">Bulk Upload Format</p>
-                    <p className="text-xs text-secondary mt-0.5">Upload an Excel file with one coding problem per row.</p>
-                  </div>
-                  <span className="badge badge-medium text-[11px]">Excel (.xlsx)</span>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2 mt-3">
-                  <div className="rounded-2xl bg-surface-lighter border border-theme p-3">
-                    <p className="text-xs font-semibold text-primary mb-1">Required columns</p>
-                    <p className="text-[11px] leading-5 font-mono text-secondary break-words">
-                      problem_id, name, statement, constraints, sample_input_1, sample_output_1, sample_input_2, sample_output_2, difficulty
-                    </p>
-                  </div>
-                  <div className="rounded-2xl bg-surface-lighter border border-theme p-3">
-                    <p className="text-xs font-semibold text-primary mb-1">Optional columns</p>
-                    <p className="text-[11px] leading-5 font-mono text-secondary break-words">
-                      marks, editorial, banner_url, branch, is_active
-                    </p>
-                  </div>
-                </div>
-                <p className="text-[11px] text-secondary mt-3">
-                  Use Easy, Medium, or Hard for <span className="font-medium text-primary">difficulty</span>. {bulkUploadModeNote} Private test cases are added separately in the problem editor.
+              <div className="space-y-3">
+                <BulkUploadTemplateCard
+                  title="Bulk Upload Format"
+                  description="Upload an Excel file with one coding problem per row."
+                  columns={CODING_TEMPLATE_COLUMNS}
+                  notes={CODING_TEMPLATE_NOTES}
+                  onDownload={downloadProblemTemplate}
+                />
+                <p className="text-[11px] text-secondary">
+                  {bulkUploadModeNote} Private test cases can be filled in the private_test_cases column when needed.
                 </p>
-                <div className="mt-3 rounded-2xl border border-theme bg-surface-lighter p-3 overflow-x-auto">
-                  <p className="text-[11px] font-semibold text-primary mb-1">Header example</p>
-                  <div className="text-[11px] font-mono text-secondary whitespace-nowrap">
-                    problem_id | name | statement | constraints | sample_input_1 | sample_output_1 | sample_input_2 | sample_output_2 | difficulty | marks | editorial | banner_url | branch | is_active
-                  </div>
-                </div>
               </div>
             )}
             <div className="flex items-center justify-between">

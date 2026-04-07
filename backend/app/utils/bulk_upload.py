@@ -21,6 +21,24 @@ QUESTION_TEMPLATE_COLUMNS = [
     "is_active",
 ]
 
+CODING_TEMPLATE_COLUMNS = [
+    "problem_id",
+    "name",
+    "statement",
+    "constraints",
+    "sample_input_1",
+    "sample_output_1",
+    "sample_input_2",
+    "sample_output_2",
+    "private_test_cases",
+    "difficulty",
+    "marks",
+    "editorial",
+    "banner_url",
+    "branch",
+    "is_active",
+]
+
 EXCEL_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 

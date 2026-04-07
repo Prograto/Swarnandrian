@@ -6,7 +6,7 @@ import DashboardLayout from '../../components/common/DashboardLayout';
 import BulkUploadTemplateCard from '../../components/common/BulkUploadTemplateCard';
 import { FACULTY_NAV } from './FacultyDashboard';
 import api from '../../utils/api';
-import { QUESTION_TEMPLATE_COLUMNS, QUESTION_TEMPLATE_NOTES, downloadExcelTemplate } from '../../utils/bulkUploadTemplates';
+import { CODING_TEMPLATE_COLUMNS, CODING_TEMPLATE_NOTES, QUESTION_TEMPLATE_COLUMNS, QUESTION_TEMPLATE_NOTES, downloadExcelTemplate } from '../../utils/bulkUploadTemplates';
 import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 
 const QTYPES = ['mcq', 'msq', 'nat', 'fill'];
@@ -127,6 +127,18 @@ export default function FacultyCompetitionTestEditor() {
 
     try {
       await downloadExcelTemplate(api, `${questionApiBase}/questions/bulk-upload/template`, `${form.test_type}_questions_template.xlsx`);
+    } catch {
+      toast.error('Template download failed');
+    }
+  };
+
+  const downloadCodingTemplate = async () => {
+    if (!isCodingTest) {
+      return;
+    }
+
+    try {
+      await downloadExcelTemplate(api, '/coding/problems/bulk-upload/template?mode=competitor', 'competition_coding_problems_template.xlsx');
     } catch {
       toast.error('Template download failed');
     }
@@ -628,6 +640,13 @@ export default function FacultyCompetitionTestEditor() {
               </div>
             ) : (
               <div className="card p-5 space-y-3">
+                <BulkUploadTemplateCard
+                  title="Coding Problem Bulk Upload Format"
+                  description="Download the template before importing coding problems for this competition test."
+                  columns={CODING_TEMPLATE_COLUMNS}
+                  notes={CODING_TEMPLATE_NOTES}
+                  onDownload={downloadCodingTemplate}
+                />
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm text-secondary">Coding test: add coding problems manually or via bulk upload, then select for this test.</p>
                   <div className="flex gap-2">
